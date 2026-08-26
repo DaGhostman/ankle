@@ -3,8 +3,6 @@ ListenStream=%t/ankle.sock
 
 [Unit]
 PartOf=graphical-session.target
-After=graphical-session.target
-ConditionEnvironment=WAYLAND_DISPLAY
 
 [Install]
 WantedBy=graphical-session.target
