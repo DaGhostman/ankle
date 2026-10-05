@@ -605,12 +605,13 @@ keyboard_keymap(void *data, struct wl_keyboard *wl_keyboard,
         goto err;
     }
 
-    while (map_str[size - 1] == '\0')
-        size--;
+    size_t keymap_len = size;
+    while (keymap_len > 0 && map_str[keymap_len - 1] == '\0')
+        keymap_len--;
 
     if (seat->kbd.xkb != NULL) {
         seat->kbd.xkb_keymap = xkb_keymap_new_from_buffer(
-            seat->kbd.xkb, map_str, size, XKB_KEYMAP_FORMAT_TEXT_V1,
+            seat->kbd.xkb, map_str, keymap_len, XKB_KEYMAP_FORMAT_TEXT_V1,
             XKB_KEYMAP_COMPILE_NO_FLAGS);
 
     }
