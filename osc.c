@@ -23,6 +23,39 @@
 
 #define UNHANDLED() LOG_DBG("unhandled: OSC: %.*s", (int)term->vt.osc.idx, term->vt.osc.data)
 
+/*
+ * OSC-99 text (title, body, category) may arrive in any number of
+ * chunks, each re-copying what came before. Cap its length, so that
+ * a flood of chunks can't turn quadratic.
+ */
+#define NOTIFY_MAX_TEXT_LEN (8 * 1024)
+
+static void
+notify_text_truncate(char *text)
+{
+    if (strlen(text) <= NOTIFY_MAX_TEXT_LEN)
+        return;
+
+    /* Don't cut a UTF-8 sequence in half */
+    size_t len = NOTIFY_MAX_TEXT_LEN;
+    while (len > 0 && ((unsigned char)text[len] & 0xc0) == 0x80)
+        len--;
+
+    text[len] = '\0';
+}
+
+static void
+notify_text_append(char **text, const char *sep, const char *chunk)
+{
+    if (strlen(*text) >= NOTIFY_MAX_TEXT_LEN)
+        return;
+
+    char *old = *text;
+    *text = xstrjoin3(old, sep, chunk);
+    free(old);
+    notify_text_truncate(*text);
+}
+
 static void
 osc_to_clipboard(struct terminal *term, const char *target,
                  const char *base64_data)
@@ -825,14 +858,13 @@ kitty_notification(struct terminal *term, char *string)
             /* Type (category) */
             char *decoded = base64_decode(value, NULL);
             if (decoded != NULL) {
-                if (category == NULL)
+                if (category == NULL) {
                     category = decoded;
-                else {
+                    notify_text_truncate(category);
+                } else {
                     /* Append, comma separated */
-                    char *old_category = category;
-                    category = xstrjoin3(old_category, ",", decoded);
+                    notify_text_append(&category, ",", decoded);
                     free(decoded);
-                    free(old_category);
                 }
             }
             break;
@@ -999,9 +1031,7 @@ kitty_notification(struct terminal *term, char *string)
             category = NULL;  /* Prevent double free */
         } else {
             /* Append, comma separated */
-            char *new_category = xstrjoin3(notif->category, ",", category);
-            free(notif->category);
-            notif->category = new_category;
+            notify_text_append(&notif->category, ",", category);
         }
     }
 
@@ -1029,11 +1059,9 @@ kitty_notification(struct terminal *term, char *string)
         if (*ptr == NULL) {
             *ptr = payload;
             payload = NULL;
-        } else {
-            char *old = *ptr;
-            *ptr = xstrjoin(old, payload);
-            free(old);
-        }
+            notify_text_truncate(*ptr);
+        } else
+            notify_text_append(ptr, "", payload);
         break;
     }
 
