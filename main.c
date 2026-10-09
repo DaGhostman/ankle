@@ -21,6 +21,7 @@
 #include "log.h"
 
 #include "config.h"
+#include "fontinfo.h"
 #include "fdm.h"
 #include "foot-features.h"
 #include "key-binding.h"
@@ -100,6 +101,8 @@ print_usage(const char *prog_name)
         "  -d,--log-level={info|warning|error|none} log level (warning)\n"
         "  -l,--log-colorize=[{never|always|auto}]  enable/disable colorization of log output on stderr\n"
         "  -S,--log-no-syslog                       disable syslog logging (only applicable in server mode)\n"
+        "     --list-font-features[=FONT]           list the OpenType features of FONT (or the\n"
+        "                                           configured font), and whether they are enabled\n"
         "  -v,--version                             show the version number and quit\n"
         "  -e                                       ignored (for compatibility with xterm -e)\n";
 
@@ -188,6 +191,7 @@ sanitize_signals(void)
 enum {
     PTY_OPTION = CHAR_MAX + 1,
     TOPLEVEL_TAG_OPTION = CHAR_MAX + 2,
+    LIST_FONT_FEATURES_OPTION = CHAR_MAX + 3,
 };
 
 int
@@ -234,12 +238,15 @@ main(int argc, char *const *argv)
         {"log-level",              required_argument, NULL, 'd'},
         {"log-colorize",           optional_argument, NULL, 'l'},
         {"log-no-syslog",          no_argument,       NULL, 'S'},
+        {"list-font-features",     optional_argument, NULL, LIST_FONT_FEATURES_OPTION},
         {"version",                no_argument,       NULL, 'v'},
         {"help",                   no_argument,       NULL, 'h'},
         {NULL,                     no_argument,       NULL,   0},
     };
 
     bool check_config = false;
+    bool list_font_features = false;
+    const char *list_font_features_pattern = NULL;
     const char *conf_path = NULL;
     char *custom_cwd = NULL;
     const char *pty_path = NULL;
@@ -268,6 +275,11 @@ main(int argc, char *const *argv)
 
         case 'C':
             check_config = true;
+            break;
+
+        case LIST_FONT_FEATURES_OPTION:
+            list_font_features = true;
+            list_font_features_pattern = optarg;
             break;
 
         case 'o':
@@ -548,6 +560,12 @@ main(int argc, char *const *argv)
     if (check_config) {
         config_free(&conf);
         return EXIT_SUCCESS;
+    }
+
+    if (list_font_features) {
+        bool ok = fontinfo_list_features(&conf, list_font_features_pattern);
+        config_free(&conf);
+        return ok ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     _Static_assert((int)LOG_CLASS_ERROR == (int)FCFT_LOG_CLASS_ERROR,

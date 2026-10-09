@@ -472,6 +472,48 @@ test_two_colors(struct context *ctx, bool (*parse_fun)(struct context *ctx),
 }
 
 static void
+test_font_features(struct context *ctx)
+{
+    struct config *conf = ctx->conf;
+
+    ctx->key = "font-features";
+    ctx->value = "calt, -liga ss01  cv01=2";
+    if (!parse_section_main(ctx))
+        BUG("[main].font-features=%s: failed to parse", ctx->value);
+
+    const char *expected[] = {"calt", "-liga", "ss01", "cv01=2"};
+    if (conf->font_features[0].count != ALEN(expected))
+        BUG("[main].font-features: got %zu features, expected %zu",
+            conf->font_features[0].count, ALEN(expected));
+    for (size_t i = 0; i < ALEN(expected); i++) {
+        if (!streq(conf->font_features[0].arr[i], expected[i]))
+            BUG("[main].font-features: feature #%zu: %s != %s",
+                i, conf->font_features[0].arr[i], expected[i]);
+    }
+
+    ctx->value = "ss01 not-a-feature!";
+    if (parse_section_main(ctx))
+        BUG("[main].font-features=%s: did not fail to parse", ctx->value);
+    if (conf->font_features[0].count != ALEN(expected))
+        BUG("[main].font-features: modified by a failed parse");
+
+    ctx->key = "font-features-italic";
+    ctx->value = "-ss03";
+    if (!parse_section_main(ctx) ||
+        conf->font_features[2].count != 1 ||
+        !streq(conf->font_features[2].arr[0], "-ss03"))
+    {
+        BUG("[main].font-features-italic=%s: failed to parse", ctx->value);
+    }
+
+    /* Empty value clears the list */
+    ctx->key = "font-features";
+    ctx->value = "";
+    if (!parse_section_main(ctx) || conf->font_features[0].count != 0)
+        BUG("[main].font-features=: did not clear the list");
+}
+
+static void
 test_section_main(void)
 {
     struct config conf = {0};
@@ -503,6 +545,7 @@ test_section_main(void)
         if (!parse_section_main(&ctx) || conf.ligatures.except_cursor)
             BUG("[main].ligatures=yes: did not reset except-cursor");
     }
+    test_font_features(&ctx);
     test_boolean(&ctx, &parse_section_main, "locked-title", &conf.locked_title);
     test_boolean(&ctx, &parse_section_main, "dpi-aware", &conf.dpi_aware);
     test_boolean(&ctx, &parse_section_main, "gamma-correct-blending", &conf.gamma_correct);

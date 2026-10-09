@@ -170,6 +170,15 @@ the ankle command line
 	Disables syslog logging. Logging is only done on stderr. This
 	option can only be used in combination with *-s*,*--server*.
 
+*--list-font-features*[=_FONT_]
+	List the OpenType features of _FONT_ (in fontconfig format), or of
+	the primary font in the configuration, and quit. For each feature,
+	its state with the current configuration (including
+	*font-features*) is shown, along with what enabled it, and its
+	description.
+	
+	Example: *ankle --list-font-features="Monaspace Neon"*
+
 *-v*,*--version*
 	Show the version number and quit.
 

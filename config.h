@@ -44,6 +44,12 @@ struct config_font {
 };
 DEFINE_LIST(struct config_font);
 
+/* OpenType features, in HarfBuzz syntax (e.g. 'ss01', '-calt', 'cv01=2') */
+struct config_font_features {
+    char **arr;
+    size_t count;
+};
+
 #if 0
 struct config_key_modifiers {
     bool shift;
@@ -271,6 +277,13 @@ struct config {
     bool gamma_correct;
     bool uppercase_regex_insert;
     struct config_font_list fonts[4];
+
+    /*
+     * [0] is applied to all styles; [1..3] are applied in addition to
+     * [0], to bold, italic and bold-italic respectively.
+     */
+    struct config_font_features font_features[4];
+
     struct font_size_adjustment font_size_adjustment;
 
     /* Custom font metrics (-1 = use real font metrics) */

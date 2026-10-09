@@ -102,6 +102,50 @@ empty string to be set, but it must be quoted: *KEY=""*
 	
 	Default: _monospace:size=8_ (*font*), _not set_ (*font-bold*,
 	*font-italic*, *font-bold-italic*).
+	
+	Since each style can use its own font, it's possible to mix
+	families. Fonts designed as a "superfamily" work particularly
+	well; for example Monaspace, whose families share metrics, but
+	differ in character:
+	
+		*font=Monaspace Neon:size=11*++
+		*font-italic=Monaspace Radon:style=Italic:size=11*++
+		*font-bold=Monaspace Krypton:weight=bold:size=11*++
+		*font-features=calt liga ss01 ss02 ss03 ss04 ss05 ss06 ss07 ss08 ss09*
+	
+	Use *font-features* (rather than *fontfeatures* in each pattern),
+	to have OpenType features apply to all fonts.
+
+*font-features*, *font-features-bold*, *font-features-italic*, *font-features-bold-italic*
+	OpenType features to enable (or disable), separated by spaces or
+	commas. Features use HarfBuzz' syntax:
+	
+		- *ss01* (or *+ss01*): enable a feature
+		- *-calt*: disable a feature
+		- *cv01=2*: select an alternative (for features with more than one)
+	
+	*font-features* applies to all fonts, of all styles, including
+	fallback fonts. *font-features-bold*, *font-features-italic* and
+	*font-features-bold-italic* are applied, in addition to
+	*font-features*, to the bold, italic and bold+italic fonts. When the
+	same feature is listed more than once, the last one wins; for
+	example, *font-features-italic=-ss03* disables arrow ligatures in
+	italic text only, even if *font-features* enables them.
+	
+	These are applied after any *fontfeatures* in the *font* patterns.
+	
+	To see which features a font has, and which are currently enabled,
+	run *ankle --list-font-features*. Many fonts only document what
+	their stylistic sets (*ssNN*) and character variants (*cvNN*) do on
+	their web site.
+	
+	Example (Monaspace):
+		*font-features=calt liga ss01 ss02 ss03 cv01=2*
+	
+	At most 32 features are applied to each font.
+	
+	Default: _not set_ (the font's default features are used, e.g.
+	*calt* and *liga*).
 
 *font-size-adjustment*
 	Amount, in _points_, _pixels_ or _percent_, to increment/decrement
@@ -288,9 +332,9 @@ empty string to be set, but it must be quoted: *KEY=""*
 	
 	Which ligatures are used is controlled by the font's features. Most
 	fonts enable *calt* and *liga* by default; additional sets must be
-	enabled with *fontfeatures*, in the *font* option. For example:
+	enabled with *font-features*. For example:
 	
-		*font=Monaspace Neon:fontfeatures=calt:fontfeatures=ss01:fontfeatures=ss03*
+		*font-features=calt ss01 ss02 ss03*
 	
 	Ligatures are not formed across spaces, changes in font style
 	(e.g. bold), double-width characters or combining characters. A

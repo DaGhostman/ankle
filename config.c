@@ -16,6 +16,7 @@
 #include <linux/input-event-codes.h>
 #include <xkbcommon/xkbcommon.h>
 #include <fontconfig/fontconfig.h>
+#include <hb.h>
 
 #define LOG_MODULE "config"
 #define LOG_ENABLE_DBG 0
@@ -503,6 +504,66 @@ static bool
 str_has_prefix(const char *str, const char *prefix)
 {
     return strncmp(str, prefix, strlen(prefix)) == 0;
+}
+
+static void
+config_font_features_destroy(struct config_font_features *features)
+{
+    for (size_t i = 0; i < features->count; i++)
+        free(features->arr[i]);
+    free(features->arr);
+    features->arr = NULL;
+    features->count = 0;
+}
+
+static void
+config_font_features_clone(struct config_font_features *dst,
+                           const struct config_font_features *src)
+{
+    dst->count = src->count;
+    dst->arr = src->count > 0
+        ? xmalloc(src->count * sizeof(dst->arr[0]))
+        : NULL;
+
+    for (size_t i = 0; i < src->count; i++)
+        dst->arr[i] = xstrdup(src->arr[i]);
+}
+
+/*
+ * Parses a list of OpenType features, separated by spaces and/or
+ * commas. Each feature is validated using HarfBuzz' feature syntax.
+ */
+static bool
+value_to_font_features(struct context *ctx, struct config_font_features *res)
+{
+    struct config_font_features features = {0};
+    char *copy = xstrdup(ctx->value);
+    char *saveptr = NULL;
+
+    for (const char *tok = strtok_r(copy, " \t,", &saveptr);
+         tok != NULL;
+         tok = strtok_r(NULL, " \t,", &saveptr))
+    {
+        hb_feature_t feature;
+        if (!hb_feature_from_string(tok, -1, &feature)) {
+            LOG_CONTEXTUAL_ERR(
+                "%s: invalid font feature (expected e.g. 'ss01', '-calt' or 'cv01=2')",
+                tok);
+            config_font_features_destroy(&features);
+            free(copy);
+            return false;
+        }
+
+        features.arr = xreallocarray(
+            features.arr, features.count + 1, sizeof(features.arr[0]));
+        features.arr[features.count++] = xstrdup(tok);
+    }
+
+    free(copy);
+
+    config_font_features_destroy(res);
+    *res = features;
+    return true;
 }
 
 static bool NOINLINE
@@ -1105,6 +1166,30 @@ parse_section_main(struct context *ctx)
 
         config_font_list_destroy(&conf->fonts[idx]);
         conf->fonts[idx] = new_list;
+        return true;
+    }
+
+    else if (streq(key, "font-features") ||
+             streq(key, "font-features-bold") ||
+             streq(key, "font-features-italic") ||
+             streq(key, "font-features-bold-italic"))
+    {
+        size_t idx =
+            streq(key, "font-features") ? 0 :
+            streq(key, "font-features-bold") ? 1 :
+            streq(key, "font-features-italic") ? 2 : 3;
+
+        if (!value_to_font_features(ctx, &conf->font_features[idx]))
+            return false;
+
+        /* fcft applies at most 32 features per font */
+        const size_t total = conf->font_features[0].count +
+            (idx > 0 ? conf->font_features[idx].count : 0);
+        if (total > 32) {
+            LOG_CONTEXTUAL_WARN(
+                "more than 32 font features; only the first 32 will be used");
+        }
+
         return true;
     }
 
@@ -3993,6 +4078,8 @@ config_clone(const struct config *old)
 
     for (size_t i = 0; i < ALEN(conf->fonts); i++)
         config_font_list_clone(&conf->fonts[i], &old->fonts[i]);
+    for (size_t i = 0; i < ALEN(conf->font_features); i++)
+        config_font_features_clone(&conf->font_features[i], &old->font_features[i]);
     config_font_list_clone(&conf->csd.font, &old->csd.font);
 
     conf->url.label_letters = xc32dup(old->url.label_letters);
@@ -4089,6 +4176,8 @@ config_free(struct config *conf)
     spawn_template_free(&conf->desktop_notifications.close);
     for (size_t i = 0; i < ALEN(conf->fonts); i++)
         config_font_list_destroy(&conf->fonts[i]);
+    for (size_t i = 0; i < ALEN(conf->font_features); i++)
+        config_font_features_destroy(&conf->font_features[i]);
     free(conf->server_socket_path);
 
     config_font_list_destroy(&conf->csd.font);

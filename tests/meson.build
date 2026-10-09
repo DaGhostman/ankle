@@ -3,6 +3,6 @@ config_test = executable(
   'test-config.c',
   wl_proto_headers,
   link_with: [common, tokenize],
-  dependencies: [pixman, xkb, fontconfig, wayland_client, fcft, tllist])
+  dependencies: [pixman, xkb, fontconfig, harfbuzz, wayland_client, fcft, tllist])
 
 test('config', config_test)

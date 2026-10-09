@@ -23,6 +23,7 @@ _arguments \
     '(-d --log-level)'{-d,--log-level}'[log level (warning)]:loglevel:(info warning error none)' \
     '(-l --log-colorize)'{-l,--log-colorize}'[enable or disable colorization of log output on stderr]:logcolor:(never always auto)' \
     '(-S --log-no-syslog)'{-s,--log-no-syslog}'[disable syslog logging (server mode only)]' \
+    '--list-font-features=-[list the OpenType features of a font, and whether they are enabled]::font:' \
     '(-v --version)'{-v,--version}'[show the version number and quit]' \
     '(-h --help)'{-h,--help}'[show help message and quit]' \
     ':command: _command_names -e' \

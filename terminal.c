@@ -1014,6 +1014,32 @@ font_loader_thread(void *_data)
     return *data->font != NULL;
 }
 
+/*
+ * Appends ':fontfeatures=<feature>' for each feature, to a fontconfig
+ * attribute string. fcft reads the features from the font pattern.
+ */
+static void
+append_font_features(char **attrs, const struct config_font_features *features)
+{
+    for (size_t i = 0; i < features->count; i++) {
+        const char *feature = features->arr[i];
+
+        /* Escape fontconfig's special characters */
+        char escaped[2 * strlen(feature) + 1];
+        size_t len = 0;
+        for (const char *c = feature; *c != '\0'; c++) {
+            if (*c == '\\' || *c == ':' || *c == ',')
+                escaped[len++] = '\\';
+            escaped[len++] = *c;
+        }
+        escaped[len] = '\0';
+
+        char *new_attrs = xasprintf("%s:fontfeatures=%s", *attrs, escaped);
+        free(*attrs);
+        *attrs = new_attrs;
+    }
+}
+
 static bool
 reload_fonts(struct terminal *term, bool resize_grid)
 {
@@ -1078,6 +1104,14 @@ reload_fonts(struct terminal *term, bool resize_grid)
         [2] = xstrjoin(dpi, !custom_italic ? ":slant=italic" : ""),
         [3] = xstrjoin(dpi, !custom_bold_italic ? ":weight=bold:slant=italic" : ""),
         };
+
+    /* Features from 'font-features' apply to all styles, and are
+     * followed by the style specific ones (later ones take precedence) */
+    for (size_t i = 0; i < 4; i++) {
+        append_font_features(&attrs[i], &conf->font_features[0]);
+        if (i > 0)
+            append_font_features(&attrs[i], &conf->font_features[i]);
+    }
 
     struct fcft_font_options *options = fcft_font_options_create();
 
