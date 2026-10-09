@@ -297,16 +297,17 @@ empty string to be set, but it must be quoted: *KEY=""*
 	ligature spanning cells with different colors is drawn in each
 	cell's color.
 	
-	Requires fcft to be compiled with text-run shaping support.
+	Requires fcft to be compiled with text-run shaping support (the
+	bundled fcft always is).
 	
-	Default: _no_.
+	Default: _yes_.
 
 *dpi-aware*
 	Boolean.
 	
 	When set to *yes*, fonts are sized using the monitor's DPI, making
 	a font of a given size have the same physical size, regardless of
-	monitor. In other words, if you drag a ankle window between
+	monitor. In other words, if you drag an ankle window between
 	different monitors, the font size remains the same.
 	
 	In this mode, the monitor's scaling factor is ignored; doubling
@@ -371,7 +372,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 
 	Time, in milliseconds, of "idle time" before ankle performs text
 	reflow, and sends the new window dimensions to the client
-	application while doing an interactive resize of a ankle
+	application while doing an interactive resize of an ankle
 	window. Idle time in this context is a period of time where the
 	window size is not changing.
 	

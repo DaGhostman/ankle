@@ -717,7 +717,7 @@ Note: you can send SIGUSR1/SIGUSR2 to a *ankle --server* process too,
 in which case all client instances will switch theme. Furthermore, all
 future client instances will also use the selected theme.
 
-You can also send SIGUSR1/SIGUSR2 to a ankleclient instance, see
+You can also send SIGUSR1/SIGUSR2 to an ankleclient instance, see
 *ankleclient*(1) for details.
 
 

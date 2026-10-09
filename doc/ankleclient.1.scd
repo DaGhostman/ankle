@@ -1,7 +1,7 @@
 ankleclient(1)
 
 # NAME
-ankleclient - start new terminals in a ankle server
+ankleclient - start new terminals in an ankle server
 
 # SYNOPSIS
 *ankleclient* [_OPTIONS_]++
@@ -204,7 +204,7 @@ The following signals have special meaning in ankleclient:
 - SIGUSR1: switch to the dark color theme (*[colors-dark]*).
 - SIGUSR2: switch to the light color theme (*[colors-light]*).
 
-When sending SIGUSR1/SIGUSR2 to a ankleclient instance, the theme is
+When sending SIGUSR1/SIGUSR2 to an ankleclient instance, the theme is
 changed in that instance only. This is different from when you send
 SIGUSR1/SIGUSR2 to the server process, where all instances change the
 theme.
