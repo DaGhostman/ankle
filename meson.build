@@ -337,6 +337,7 @@ executable(
   'notify.c', 'notify.h',
   'quirks.c', 'quirks.h',
   'reaper.c', 'reaper.h',
+  'reload.c', 'reload.h',
   'render.c', 'render.h',
   'shaping.c', 'shaping.h',
   'search.c', 'search.h',

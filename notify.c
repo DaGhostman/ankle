@@ -358,7 +358,7 @@ notify_notify(struct terminal *term, struct notification *notif)
 
     if ((term->conf->desktop_notifications.inhibit_when_focused ||
          notif->when != NOTIFY_ALWAYS)
-        && term->kbd_focus)
+        && term->kbd_focus && !notif->force)
     {
         /* No notifications while we're focused */
         return false;

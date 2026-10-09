@@ -40,6 +40,36 @@ Options are set using KEY=VALUE pairs:
 Empty values (*KEY=*) are not supported. String options do allow the
 empty string to be set, but it must be quoted: *KEY=""*
 
+# RELOADING
+
+The configuration is reloaded automatically when the configuration
+file, or any of its *include*d files, change (see
+*auto-reload-config*). It can also be reloaded with the
+*config-reload* key binding.
+
+If the new configuration has errors, it is not applied; the running
+terminals keep their current configuration, and a desktop
+notification describes the error.
+
+When reloaded, the following take effect in running terminals:
+
+	- colors (both color themes, including *alpha* and *blur*). Note
+	  that this discards colors changed by applications, with escape
+	  sequences
+	- fonts, *font-features* and *ligatures* (changing any font option
+	  resets the font size)
+	- the default cursor style, and cursor blinking
+	- key, mouse, search and URL bindings
+	- options that are looked up when used, e.g. the *bell*, *url* and
+	  *desktop-notifications* sections, and *hide-when-typing*
+
+Options that only apply when a terminal is created (e.g. *shell*,
+*term*, *app-id*, *title*, *pad*, *initial-window-size-\**,
+*scrollback.lines* and *csd*) are used by new terminals only.
+
+Options set on the command line (*--override*, *--font* etc.) are
+re-applied on top of the reloaded configuration.
+
 # SECTION: main
 
 *shell*
@@ -343,6 +373,13 @@ empty string to be set, but it must be quoted: *KEY=""*
 	
 	Requires fcft to be compiled with text-run shaping support (the
 	bundled fcft always is).
+	
+	Default: _yes_.
+
+*auto-reload-config*
+	Boolean. When enabled, the configuration file, and all files it
+	includes, are watched for changes, and the configuration is reloaded
+	when they change. See *RELOADING*.
 	
 	Default: _yes_.
 
@@ -1599,6 +1636,10 @@ e.g. *search-start=none*.
 	change the theme (see *ankle*(1) for details.)
 	
 	Default: _none_
+
+*config-reload*
+	Reload the configuration (see *RELOADING*). Useful when
+	*auto-reload-config* is disabled. Default: _none_.
 
 *quit*
 	Quit ankle. Default: _none_.

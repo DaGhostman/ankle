@@ -30,6 +30,7 @@
 #include "kitty-keymap.h"
 #include "macros.h"
 #include "quirks.h"
+#include "reload.h"
 #include "render.h"
 #include "search.h"
 #include "selection.h"
@@ -503,6 +504,10 @@ execute_binding(struct seat *seat, struct terminal *term,
 
     case BIND_ACTION_THEME_TOGGLE:
         term_theme_toggle(term);
+        return true;
+
+    case BIND_ACTION_CONFIG_RELOAD:
+        config_reload_request();
         return true;
 
     case BIND_ACTION_SELECT_BEGIN:

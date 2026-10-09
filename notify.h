@@ -53,6 +53,7 @@ struct notification {
     bool report_closed;     /* OSC-99: report notification closed to client */
 
     bool muted;            /* Explicitly mute the notification */
+    bool force;            /* Show even when focused (for ankle's own messages) */
     char *sound_name;      /* Should be set to NULL if muted == true */
 
     /*

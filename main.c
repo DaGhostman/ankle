@@ -22,6 +22,7 @@
 
 #include "config.h"
 #include "fontinfo.h"
+#include "reload.h"
 #include "fdm.h"
 #include "foot-features.h"
 #include "key-binding.h"
@@ -551,19 +552,22 @@ main(int argc, char *const *argv)
     bool conf_successful = config_load(
         &conf, conf_path, &user_notifications, &overrides, check_config, as_server);
 
-    tll_free_and_free(overrides, free);
+    /* Note: overrides are kept, for re-applying when reloading */
     if (!conf_successful) {
+        tll_free_and_free(overrides, free);
         config_free(&conf);
         return ret;
     }
 
     if (check_config) {
+        tll_free_and_free(overrides, free);
         config_free(&conf);
         return EXIT_SUCCESS;
     }
 
     if (list_font_features) {
         bool ok = fontinfo_list_features(&conf, list_font_features_pattern);
+        tll_free_and_free(overrides, free);
         config_free(&conf);
         return ok ? EXIT_SUCCESS : EXIT_FAILURE;
     }
@@ -604,6 +608,7 @@ main(int argc, char *const *argv)
     struct renderer *renderer = NULL;
     struct terminal *term = NULL;
     struct server *server = NULL;
+    struct config_reloader *reloader = NULL;
     struct shutdown_context shutdown_ctx = {.term = &term, .exit_code = foot_exit_failure};
 
     const char *cwd = custom_cwd;
@@ -678,6 +683,11 @@ main(int argc, char *const *argv)
     if (as_server && (server = server_init(&conf, fdm, reaper, wayl)) == NULL)
         goto out;
 
+    /* Not fatal; terminals work fine without it */
+    reloader = config_reloader_init(
+        fdm, wayl, server, &conf, conf_path, &overrides, as_server);
+    tll_free_and_free(overrides, free);
+
     volatile sig_atomic_t aborted = false;
     if (!fdm_signal_add(fdm, SIGINT, &fdm_sigint, (void *)&aborted) ||
         !fdm_signal_add(fdm, SIGTERM, &fdm_sigint, (void *)&aborted))
@@ -726,6 +736,8 @@ out:
     free(custom_cwd);
     server_destroy(server);
     term_destroy(term);
+    config_reloader_destroy(reloader);
+    tll_free_and_free(overrides, free);
 
     shm_fini();
     render_destroy(renderer);

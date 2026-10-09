@@ -187,6 +187,7 @@ static const char *const binding_action_map[] = {
     [BIND_ACTION_THEME_SWITCH_DARK] = "color-theme-switch-dark",
     [BIND_ACTION_THEME_SWITCH_LIGHT] = "color-theme-switch-light",
     [BIND_ACTION_THEME_TOGGLE] = "color-theme-toggle",
+    [BIND_ACTION_CONFIG_RELOAD] = "config-reload",
 
     /* Mouse-specific actions */
     [BIND_ACTION_SCROLLBACK_UP_MOUSE] = "scrollback-up-mouse",
@@ -1022,6 +1023,8 @@ parse_section_main(struct context *ctx)
             return false;
         }
 
+        tll_push_back(conf->source_files, xstrdup(include_path));
+
         bool ret = parse_config_file(
             include, conf, include_path, errors_are_fatal);
         fclose(include);
@@ -1267,6 +1270,9 @@ parse_section_main(struct context *ctx)
 
     else if (streq(key, "opaque-fullscreen"))
         return value_to_bool(ctx, &conf->opaque_fullscreen);
+
+    else if (streq(key, "auto-reload-config"))
+        return value_to_bool(ctx, &conf->auto_reload);
 
     else if (streq(key, "ligatures")) {
         if (streq(value, "except-cursor")) {
@@ -3641,6 +3647,8 @@ config_load(struct config *conf, const char *conf_path,
 
     *conf = (struct config) {
         .conf_path = (conf_path ? xstrdup(conf_path) : NULL),
+        .source_files = tll_init(),
+        .auto_reload = true,
         .term = xstrdup(FOOT_DEFAULT_TERM),
         .shell = get_shell(),
         .title = xstrdup("ankle"),
@@ -3866,6 +3874,7 @@ config_load(struct config *conf, const char *conf_path,
 
     if (conf_file.path && conf_file.fd >= 0) {
         LOG_INFO("loading configuration from %s", conf_file.path);
+        tll_push_back(conf->source_files, xstrdup(conf_file.path));
 
         FILE *f = fdopen(conf_file.fd, "r");
         if (f == NULL) {
@@ -3914,12 +3923,43 @@ config_load(struct config *conf, const char *conf_path,
     return ret;
 }
 
+static bool
+override_apply_one(struct context *ctx, char *item)
+{
+    char *section_name = NULL;
+
+    if (!parse_key_value(item, &section_name, &ctx->key, &ctx->value)) {
+        LOG_CONTEXTUAL_ERR("syntax error: key/value pair has no %s",
+                           ctx->key == NULL ? "key" : "value");
+        return false;
+    }
+
+    if (section_name[0] == '\0') {
+        LOG_CONTEXTUAL_ERR("empty section name");
+        return false;
+    }
+
+    char *maybe_section_suffix = NULL;
+    enum section section = str_to_section(section_name, &maybe_section_suffix);
+
+    ctx->section = section_name;
+    ctx->section_suffix = maybe_section_suffix;
+
+    if (section == SECTION_COUNT) {
+        LOG_CONTEXTUAL_ERR("invalid section name: %s", section_name);
+        return false;
+    }
+
+    parser_fun_t section_parser = section_info[section].fun;
+    xassert(section_parser != NULL);
+
+    return section_parser(ctx);
+}
+
 bool
 config_override_apply(struct config *conf, config_override_t *overrides,
                       bool errors_are_fatal)
 {
-    char *section_name = NULL;
-
     struct context context = {
         .conf = conf,
         .path = "override",
@@ -3931,43 +3971,15 @@ config_override_apply(struct config *conf, config_override_t *overrides,
     tll_foreach(*overrides, it) {
         context.lineno++;
 
-        if (!parse_key_value(it->item, &section_name, &context.key, &context.value))
-        {
-            LOG_CONTEXTUAL_ERR("syntax error: key/value pair has no %s",
-                               context.key == NULL ? "key" : "value");
-            if (errors_are_fatal)
-                return false;
-            continue;
-        }
+        /* Parsing modifies the string; keep the override intact, so
+         * that it can be re-applied when the configuration is
+         * reloaded */
+        char *item = xstrdup(it->item);
+        bool ok = override_apply_one(ctx, item);
+        free(item);
 
-        if (section_name[0] == '\0') {
-            LOG_CONTEXTUAL_ERR("empty section name");
-            if (errors_are_fatal)
-                return false;
-            continue;
-        }
-
-        char *maybe_section_suffix = NULL;
-        enum section section = str_to_section(section_name, &maybe_section_suffix);
-
-        context.section = section_name;
-        context.section_suffix = maybe_section_suffix;
-
-        if (section == SECTION_COUNT) {
-            LOG_CONTEXTUAL_ERR("invalid section name: %s", section_name);
-            if (errors_are_fatal)
-                return false;
-            continue;
-        }
-
-        parser_fun_t section_parser = section_info[section].fun;
-        xassert(section_parser != NULL);
-
-        if (!section_parser(ctx)) {
-            if (errors_are_fatal)
-                return false;
-            continue;
-        }
+        if (!ok && errors_are_fatal)
+            return false;
     }
 
     conf->csd.border_width = max(
@@ -4057,6 +4069,56 @@ key_binding_list_clone(struct config_key_binding_list *dst,
     }
 }
 
+static bool
+pt_or_px_equal(const struct pt_or_px *a, const struct pt_or_px *b)
+{
+    return a->px == b->px && a->pt == b->pt;
+}
+
+bool
+config_fonts_equal(const struct config *a, const struct config *b)
+{
+    for (size_t i = 0; i < ALEN(a->fonts); i++) {
+        if (a->fonts[i].count != b->fonts[i].count)
+            return false;
+
+        for (size_t j = 0; j < a->fonts[i].count; j++) {
+            const struct config_font *fa = &a->fonts[i].arr[j];
+            const struct config_font *fb = &b->fonts[i].arr[j];
+
+            if (!streq(fa->pattern, fb->pattern) ||
+                fa->pt_size != fb->pt_size ||
+                fa->px_size != fb->px_size)
+            {
+                return false;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < ALEN(a->font_features); i++) {
+        if (a->font_features[i].count != b->font_features[i].count)
+            return false;
+
+        for (size_t j = 0; j < a->font_features[i].count; j++) {
+            if (!streq(a->font_features[i].arr[j], b->font_features[i].arr[j]))
+                return false;
+        }
+    }
+
+    return
+        pt_or_px_equal(&a->line_height, &b->line_height) &&
+        pt_or_px_equal(&a->letter_spacing, &b->letter_spacing) &&
+        pt_or_px_equal(&a->horizontal_letter_offset, &b->horizontal_letter_offset) &&
+        pt_or_px_equal(&a->vertical_letter_offset, &b->vertical_letter_offset) &&
+        a->use_custom_underline_offset == b->use_custom_underline_offset &&
+        pt_or_px_equal(&a->underline_offset, &b->underline_offset) &&
+        pt_or_px_equal(&a->underline_thickness, &b->underline_thickness) &&
+        pt_or_px_equal(&a->strikeout_thickness, &b->strikeout_thickness) &&
+        a->box_drawings_uses_font_glyphs == b->box_drawings_uses_font_glyphs &&
+        a->dpi_aware == b->dpi_aware &&
+        a->tweak.fcft_filter == b->tweak.fcft_filter;
+}
+
 struct config *
 config_clone(const struct config *old)
 {
@@ -4064,6 +4126,10 @@ config_clone(const struct config *old)
     *conf = *old;
 
     conf->conf_path = (old->conf_path ? xstrdup(old->conf_path) : NULL);
+    conf->source_files.length = 0;
+    conf->source_files.head = conf->source_files.tail = NULL;
+    tll_foreach(old->source_files, it)
+        tll_push_back(conf->source_files, xstrdup(it->item));
     conf->term = xstrdup(old->term);
     conf->shell = xstrdup(old->shell);
     conf->title = xstrdup(old->title);
@@ -4167,6 +4233,7 @@ void
 config_free(struct config *conf)
 {
     free(conf->conf_path);
+    tll_free_and_free(conf->source_files, free);
     free(conf->term);
     free(conf->shell);
     free(conf->title);

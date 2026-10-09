@@ -885,6 +885,9 @@ void term_damage_all(struct terminal *term);
 void term_damage_view(struct terminal *term);
 void term_set_ligatures(struct terminal *term, bool enable);
 
+/* Switches the terminal to a new (reloaded) configuration */
+void term_config_reload(struct terminal *term, const struct config *conf);
+
 void term_damage_cursor(struct terminal *term);
 void term_damage_margins(struct terminal *term);
 void term_damage_color(struct terminal *term, enum color_source src, int idx);

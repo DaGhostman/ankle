@@ -581,12 +581,16 @@ osc_notify(struct terminal *term, char *string)
     if (msg != NULL)
         msgdup = xstrdup(msg);
 
-    notify_notify(term, &(struct notification){
+    struct notification notif = {
         .title = xstrdup(title),
         .body = msgdup,
         .expire_time = -1,
         .focus = true,
-    });
+    };
+
+    /* notify_notify() takes ownership of what it needs; free the rest */
+    notify_notify(term, &notif);
+    notify_free(term, &notif);
 }
 
 IGNORE_WARNING("-Wpedantic")

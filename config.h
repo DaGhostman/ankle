@@ -235,6 +235,11 @@ enum underline_style {
 
 struct config {
     char *conf_path;
+
+    /* All files read (main configuration file, and includes); watched
+     * for changes, when auto-reload-config is enabled */
+    tll(char *) source_files;
+    bool auto_reload;
     char *term;
     char *shell;
     char *title;
@@ -509,3 +514,6 @@ conf_modifiers_to_mask(
 #endif
 bool check_if_font_is_monospaced(
     const char *pattern, user_notifications_t *notifications);
+
+/* True if the font related options are the same in both configurations */
+bool config_fonts_equal(const struct config *a, const struct config *b);

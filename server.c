@@ -61,6 +61,11 @@ struct terminal_instance {
     struct server *server;
     struct client *client;
     struct config *conf;
+
+    /* Client's configuration changes, re-applied when the
+     * configuration is reloaded */
+    config_override_t overrides;
+    bool hold;
 };
 static void instance_destroy(struct terminal_instance *instance, int exit_code);
 
@@ -127,8 +132,50 @@ instance_destroy(struct terminal_instance *instance, int exit_code)
         config_free(instance->conf);
         free(instance->conf);
     }
+    tll_free_and_free(instance->overrides, free);
     free(instance);
 
+}
+
+static void
+instance_config_reloaded(struct terminal_instance *instance,
+                         struct config *conf)
+{
+    if (instance->terminal == NULL)
+        return;
+
+    struct config *old = instance->conf;
+
+    if (old == NULL) {
+        term_config_reload(instance->terminal, conf);
+        return;
+    }
+
+    /* Terminal has its own configuration; re-apply the client's
+     * changes on top of the reloaded configuration */
+    struct config *new = config_clone(conf);
+    new->hold_at_exit = instance->hold;
+    config_override_apply(new, &instance->overrides, false);
+
+    term_config_reload(instance->terminal, new);
+    instance->conf = new;
+
+    config_free(old);
+    free(old);
+}
+
+void
+server_config_reloaded(struct server *server, struct config *conf)
+{
+    server->conf = conf;
+
+    tll_foreach(server->clients, it) {
+        if (it->item->instance != NULL)
+            instance_config_reloaded(it->item->instance, conf);
+    }
+
+    tll_foreach(server->terminals, it)
+        instance_config_reloaded(it->item, conf);
 }
 
 static void
@@ -386,7 +433,12 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
         .client = NULL,
         .server = server,
         .conf = conf,
+        .overrides = overrides,
+        .hold = cdata.hold,
     };
+
+    /* Ownership transferred to the instance */
+    overrides = (config_override_t)tll_init();
 
     instance->terminal = term_init(
         conf != NULL ? conf : server->conf,

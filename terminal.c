@@ -2569,6 +2569,49 @@ term_damage_view(struct terminal *term)
 }
 
 void
+term_config_reload(struct terminal *term, const struct config *conf)
+{
+    const struct config *old = term->conf;
+    struct key_binding_manager *mgr = term->wl->key_binding_manager;
+
+    /* Load the new key bindings before releasing the old ones */
+    key_binding_new_for_conf(mgr, term->wl, conf);
+    term->conf = conf;
+    key_binding_unref(mgr, old);
+
+    /* Colors; this discards colors changed with escape sequences */
+    term_theme_apply(
+        term, term->colors.active_theme == COLOR_THEME_DARK
+            ? &conf->colors_dark : &conf->colors_light);
+    wayl_win_alpha_changed(term->window);
+    term_font_subpixel_changed(term);
+
+    /* Cursor defaults (applications may still override them) */
+    term->cursor_style = conf->cursor.style;
+    term->cursor_blink.deccsusr = conf->cursor.blink.enabled;
+    term_cursor_blink_update(term);
+
+    if (old->ligatures.enabled != conf->ligatures.enabled)
+        term_set_ligatures(term, conf->ligatures.enabled);
+
+    /* Reloading fonts resets the font size; only do it when needed */
+    if (!config_fonts_equal(old, conf)) {
+        for (size_t i = 0; i < 4; i++) {
+            free(term->font_sizes[i]);
+            term->font_sizes[i] = xmalloc(
+                sizeof(term->font_sizes[i][0]) * conf->fonts[i].count);
+        }
+
+        if (!load_fonts_from_conf(term))
+            LOG_ERR("failed to reload fonts");
+    }
+
+    term_damage_view(term);
+    term_damage_margins(term);
+    render_refresh(term);
+}
+
+void
 term_set_ligatures(struct terminal *term, bool enable)
 {
     if (enable == term->ligatures)
