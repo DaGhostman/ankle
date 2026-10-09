@@ -2304,6 +2304,10 @@ UNITTEST
     }
 
 no_keymap:
+    /* Still set if the test was skipped (e.g. no compose file for the
+     * locale); NULL otherwise */
+    xkb_state_unref(seat.kbd.xkb_state);
+    xkb_keymap_unref(seat.kbd.xkb_keymap);
     xkb_context_unref(seat.kbd.xkb);
     key_binding_manager_destroy(key_binding_manager);
 
