@@ -692,23 +692,15 @@ draw_cursor(const struct terminal *term, const struct cell *cell,
     }
 }
 
-static int
-render_cell(struct terminal *term, pixman_image_t *pix,
-            pixman_region32_t *damage, struct row *row, int row_no, int col,
-            bool has_cursor)
+struct cell_colors {
+    uint32_t fg;
+    uint32_t bg;
+    uint16_t alpha;
+};
+
+static struct cell_colors
+cell_colors(const struct terminal *term, const struct cell *cell)
 {
-    struct cell *cell = &row->cells[col];
-    if (cell->attrs.clean)
-        return 0;
-
-    cell->attrs.clean = 1;
-    cell->attrs.confined = true;
-
-    int width = term->cell_width;
-    int height = term->cell_height;
-    const int x = term->margins.left + col * width;
-    const int y = term->margins.top + row_no * height;
-
     uint32_t _fg = 0;
     uint32_t _bg = 0;
 
@@ -853,19 +845,35 @@ render_cell(struct terminal *term, pixman_image_t *pix,
     if (cell->attrs.blink && term->blink.state == BLINK_OFF)
         _fg = color_blend_towards(_fg, 0x00000000, term->conf->dim.amount);
 
-    const bool gamma_correct = wayl_do_linear_blending(term->wl, term->conf);
-    pixman_color_t fg = color_hex_to_pixman(_fg, gamma_correct);
-    pixman_color_t bg = color_hex_to_pixman_with_alpha(_bg, alpha, gamma_correct);
+    return (struct cell_colors){.fg = _fg, .bg = _bg, .alpha = alpha};
+}
 
+struct cell_glyphs {
+    struct fcft_font *font;
+
+    /* Non-NULL if combining characters must be rendered manually */
+    const struct composed *composed;
+
+    const struct fcft_glyph *single;  /* Backing storage for 'glyphs' */
+    const struct fcft_glyph **glyphs;
+    unsigned count;
+    int cols;
+};
+
+static void
+cell_glyphs(struct terminal *term, const struct cell *cell,
+            struct cell_glyphs *out)
+{
     struct fcft_font *font = attrs_to_font(term, &cell->attrs);
     const struct composed *composed = NULL;
-    const struct fcft_grapheme *grapheme = NULL;
-    const struct fcft_glyph *single = NULL;
     const struct fcft_glyph **glyphs = NULL;
     unsigned glyph_count = 0;
+    const struct fcft_grapheme *grapheme = NULL;
+    int cell_cols = 1;
+
+    out->single = NULL;
 
     char32_t base = cell->wc;
-    int cell_cols = 1;
 
     if (base != 0) {
         if (unlikely(
@@ -922,22 +930,22 @@ render_cell(struct terminal *term, pixman_image_t *pix,
                 *arr = xcalloc(count, sizeof((*arr)[0]));
 
             if (likely((*arr)[idx] != NULL))
-                single = (*arr)[idx];
+                out->single = (*arr)[idx];
             else {
                 mtx_lock(&term->render.workers.lock);
 
                 /* Other thread may have instantiated it while we
                  * acquired the lock */
-                single = (*arr)[idx];
-                if (likely(single == NULL))
-                    single = (*arr)[idx] = box_drawing(term, base);
+                out->single = (*arr)[idx];
+                if (likely(out->single == NULL))
+                    out->single = (*arr)[idx] = box_drawing(term, base);
                 mtx_unlock(&term->render.workers.lock);
             }
 
-            if (single != NULL) {
+            if (out->single != NULL) {
                 glyph_count = 1;
-                glyphs = &single;
-                cell_cols = single->cols;
+                glyphs = &out->single;
+                cell_cols = out->single->cols;
             }
         }
 
@@ -965,22 +973,22 @@ render_cell(struct terminal *term, pixman_image_t *pix,
             }
         }
 
-        if (single == NULL && grapheme == NULL) {
+        if (out->single == NULL && grapheme == NULL) {
             if (unlikely(base >= CELL_SPACER)) {
                 glyph_count = 0;
                 cell_cols = 1;
             } else {
                 xassert(base != 0);
-                single = fcft_rasterize_char_utf32(font, base, term->font_subpixel);
-                if (single == NULL) {
+                out->single = fcft_rasterize_char_utf32(font, base, term->font_subpixel);
+                if (out->single == NULL) {
                     glyph_count = 0;
                     cell_cols = 1;
                 } else {
                     glyph_count = 1;
-                    glyphs = &single;
+                    glyphs = &out->single;
 
                     const size_t forced_width = composed != NULL ? composed->forced_width : 0;
-                    cell_cols = forced_width > 0 ? forced_width : single->cols;
+                    cell_cols = forced_width > 0 ? forced_width : out->single->cols;
                 }
             }
         }
@@ -988,70 +996,24 @@ render_cell(struct terminal *term, pixman_image_t *pix,
 
     assert(glyph_count == 0 || glyphs != NULL);
 
-    const int cols_left = term->cols - col;
-    cell_cols = max(1, min(cell_cols, cols_left));
+    out->font = font;
+    out->composed = composed;
+    out->glyphs = glyphs;
+    out->count = glyph_count;
+    out->cols = cell_cols;
+}
 
-    /*
-     * Determine cells that will bleed into their right neighbor and remember
-     * them for cleanup in the next frame.
-     */
-    int render_width = cell_cols * width;
-    if (term->conf->tweak.overflowing_glyphs &&
-        glyph_count > 0 &&
-        cols_left > cell_cols)
-    {
-        int glyph_width = 0, advance = 0;
-        for (size_t i = 0; i < glyph_count; i++) {
-            glyph_width = max(glyph_width,
-                              advance + glyphs[i]->x + glyphs[i]->width);
-            advance += glyphs[i]->advance.x;
-        }
+static void
+draw_cell_glyphs(struct terminal *term, pixman_image_t *pix,
+                 const struct cell *cell, const struct cell_glyphs *cg,
+                 const pixman_color_t *fg, int x, int y, int cell_cols)
+{
+    struct fcft_font *font = cg->font;
+    const struct composed *composed = cg->composed;
+    const struct fcft_glyph **glyphs = cg->glyphs;
+    const unsigned glyph_count = cg->count;
 
-        if (glyph_width > render_width) {
-            render_width = min(glyph_width, render_width + width);
-
-            for (int i = 0; i < cell_cols; i++)
-                row->cells[col + i].attrs.confined = false;
-        }
-    }
-
-    pixman_region32_t clip;
-    pixman_region32_init_rect(
-        &clip, x, y,
-        render_width, term->cell_height);
-    pixman_image_set_clip_region32(pix, &clip);
-
-    if (damage != NULL) {
-        pixman_region32_union_rect(
-            damage, damage, x, y, render_width, term->cell_height);
-    }
-
-    pixman_region32_fini(&clip);
-
-    /* Background */
-    pixman_image_fill_rectangles(
-        PIXMAN_OP_SRC, pix, &bg, 1,
-        &(pixman_rectangle16_t){x, y, cell_cols * width, height});
-
-    if (cell->attrs.blink && term->blink.fd < 0) {
-        /* TODO: use a custom lock for this? */
-        mtx_lock(&term->render.workers.lock);
-        term_arm_blink_timer(term);
-        mtx_unlock(&term->render.workers.lock);
-    }
-
-    if (unlikely(has_cursor && term->cursor_style == CURSOR_BLOCK && term->kbd_focus)) {
-        const pixman_color_t bg_without_alpha = color_hex_to_pixman(_bg, gamma_correct);
-        draw_cursor(term, cell, font, pix, &fg, &bg_without_alpha, x, y, cell_cols);
-    }
-
-    if (cell->wc == 0 || cell->wc >= CELL_SPACER || cell->wc == U'\t' ||
-        (unlikely(cell->attrs.conceal) && !is_selected))
-    {
-        goto draw_cursor;
-    }
-
-    pixman_image_t *clr_pix = pixman_image_create_solid_fill(&fg);
+    pixman_image_t *clr_pix = pixman_image_create_solid_fill(fg);
 
     int pen_x = x;
     for (unsigned i = 0; i < glyph_count; i++) {
@@ -1132,10 +1094,18 @@ render_cell(struct terminal *term, pixman_image_t *pix,
     }
 
     pixman_image_unref(clr_pix);
+}
 
+static void
+draw_cell_decorations(const struct terminal *term, pixman_image_t *pix,
+                      const struct row *row, int col,
+                      const struct cell *cell, const struct fcft_font *font,
+                      const pixman_color_t *fg, bool gamma_correct,
+                      int x, int y, int cell_cols)
+{
     /* Underline */
     if (cell->attrs.underline) {
-        pixman_color_t underline_color = fg;
+        pixman_color_t underline_color = *fg;
         enum underline_style underline_style = UNDERLINE_SINGLE;
 
         /* Check if cell has a styled underline. This lookup is fairly
@@ -1179,7 +1149,7 @@ render_cell(struct terminal *term, pixman_image_t *pix,
     }
 
     if (cell->attrs.strikethrough)
-        draw_strikeout(term, pix, font, &fg, x, y, cell_cols);
+        draw_strikeout(term, pix, font, fg, x, y, cell_cols);
 
     if (unlikely(cell->attrs.url && term->conf->url.style != UNDERLINE_NONE)) {
         pixman_color_t url_color = color_hex_to_pixman(
@@ -1192,6 +1162,107 @@ render_cell(struct terminal *term, pixman_image_t *pix,
             term, pix, font, &url_color, term->conf->url.style,
             x, y, cell_cols);
     }
+}
+
+static int
+render_cell(struct terminal *term, pixman_image_t *pix,
+            pixman_region32_t *damage, struct row *row, int row_no, int col,
+            bool has_cursor)
+{
+    struct cell *cell = &row->cells[col];
+    if (cell->attrs.clean)
+        return 0;
+
+    cell->attrs.clean = 1;
+    cell->attrs.confined = true;
+
+    int width = term->cell_width;
+    int height = term->cell_height;
+    const int x = term->margins.left + col * width;
+    const int y = term->margins.top + row_no * height;
+
+    const bool is_selected = cell->attrs.selected;
+    const struct cell_colors colors = cell_colors(term, cell);
+    const uint32_t _bg = colors.bg;
+
+    const bool gamma_correct = wayl_do_linear_blending(term->wl, term->conf);
+    pixman_color_t fg = color_hex_to_pixman(colors.fg, gamma_correct);
+    pixman_color_t bg = color_hex_to_pixman_with_alpha(_bg, colors.alpha, gamma_correct);
+
+    struct cell_glyphs cg;
+    cell_glyphs(term, cell, &cg);
+
+    struct fcft_font *font = cg.font;
+    const struct fcft_glyph **glyphs = cg.glyphs;
+    const unsigned glyph_count = cg.count;
+    int cell_cols = cg.cols;
+
+    const int cols_left = term->cols - col;
+    cell_cols = max(1, min(cell_cols, cols_left));
+
+    /*
+     * Determine cells that will bleed into their right neighbor and remember
+     * them for cleanup in the next frame.
+     */
+    int render_width = cell_cols * width;
+    if (term->conf->tweak.overflowing_glyphs &&
+        glyph_count > 0 &&
+        cols_left > cell_cols)
+    {
+        int glyph_width = 0, advance = 0;
+        for (size_t i = 0; i < glyph_count; i++) {
+            glyph_width = max(glyph_width,
+                              advance + glyphs[i]->x + glyphs[i]->width);
+            advance += glyphs[i]->advance.x;
+        }
+
+        if (glyph_width > render_width) {
+            render_width = min(glyph_width, render_width + width);
+
+            for (int i = 0; i < cell_cols; i++)
+                row->cells[col + i].attrs.confined = false;
+        }
+    }
+
+    pixman_region32_t clip;
+    pixman_region32_init_rect(
+        &clip, x, y,
+        render_width, term->cell_height);
+    pixman_image_set_clip_region32(pix, &clip);
+
+    if (damage != NULL) {
+        pixman_region32_union_rect(
+            damage, damage, x, y, render_width, term->cell_height);
+    }
+
+    pixman_region32_fini(&clip);
+
+    /* Background */
+    pixman_image_fill_rectangles(
+        PIXMAN_OP_SRC, pix, &bg, 1,
+        &(pixman_rectangle16_t){x, y, cell_cols * width, height});
+
+    if (cell->attrs.blink && term->blink.fd < 0) {
+        /* TODO: use a custom lock for this? */
+        mtx_lock(&term->render.workers.lock);
+        term_arm_blink_timer(term);
+        mtx_unlock(&term->render.workers.lock);
+    }
+
+    if (unlikely(has_cursor && term->cursor_style == CURSOR_BLOCK && term->kbd_focus)) {
+        const pixman_color_t bg_without_alpha = color_hex_to_pixman(_bg, gamma_correct);
+        draw_cursor(term, cell, font, pix, &fg, &bg_without_alpha, x, y, cell_cols);
+    }
+
+    if (cell->wc == 0 || cell->wc >= CELL_SPACER || cell->wc == U'\t' ||
+        (unlikely(cell->attrs.conceal) && !is_selected))
+    {
+        goto draw_cursor;
+    }
+
+    draw_cell_glyphs(term, pix, cell, &cg, &fg, x, y, cell_cols);
+    draw_cell_decorations(
+        term, pix, row, col, cell, font, &fg, gamma_correct, x, y, cell_cols);
 
 draw_cursor:
     if (has_cursor && (term->cursor_style != CURSOR_BLOCK || !term->kbd_focus)) {
