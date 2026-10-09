@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    # Arch has recent enough wayland-protocols, meson etc
+    container: archlinux:latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gcc (release)
+            cc: gcc
+            options: --buildtype=release -Db_lto=true
+          - name: clang (release)
+            cc: clang
+            options: --buildtype=release
+          - name: gcc (debug, sanitizers)
+            cc: gcc
+            options: --buildtype=debug -Db_sanitize=address,undefined
+
+    steps:
+      - name: Install dependencies
+        run: >
+          pacman -Syu --noconfirm --needed
+          base-devel git meson ninja clang
+          wayland wayland-protocols libxkbcommon pixman
+          fontconfig freetype2 harfbuzz libutf8proc
+          ncurses scdoc ttf-dejavu
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          # generate-version.sh runs git in the (differently owned) checkout
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          meson setup bld ${{ matrix.options }} -Ddocs=enabled -Dgrapheme-clustering=enabled
+
+      - name: Build
+        run: ninja -C bld
+
+      - name: Test
+        run: meson test -C bld --print-errorlogs
+
+      - name: Install
+        run: DESTDIR="$PWD/staging" meson install -C bld
+
+      - name: Smoke test
+        run: |
+          ./bld/ankle --version
+          ./bld/ankleclient --version
+          ./bld/ankle --check-config --config=ankle.ini
