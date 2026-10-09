@@ -1,26 +1,35 @@
-foot.ini(5)
+ankle.ini(5)
 
 # NAME
 
-foot.ini - configuration file for *foot*(1)
+ankle.ini - configuration file for *ankle*(1)
 
 # DESCRIPTION
 
-*foot* uses the standard _unix configuration format_, with section based
+*ankle* uses the standard _unix configuration format_, with section based
 key/value pairs. The default section is usually unnamed, i.e. not prefixed
 with a _[section]_. However it can also be explicitly named _[main]_,
 say if it needs to be reopened after any of the other sections.
 
-foot will search for a configuration file in the following locations,
+ankle will search for a configuration file in the following locations,
 in this order:
 
+	- *XDG_CONFIG_HOME/ankle/ankle.ini* (defaulting to
+	  *$HOME/.config/ankle/ankle.ini* if unset)
 	- *XDG_CONFIG_HOME/foot/foot.ini* (defaulting to
 	  *$HOME/.config/foot/foot.ini* if unset)
+	- *XDG_CONFIG_DIRS/ankle/ankle.ini* (defaulting to
+	  */etc/xdg/ankle/ankle.ini* if unset)
 	- *XDG_CONFIG_DIRS/foot/foot.ini* (defaulting to
 	  */etc/xdg/foot/foot.ini* if unset)
 
+foot's configuration files are only used as a fallback, making it easy
+to switch from foot. ankle-specific options (e.g. *ligatures*) should
+go in *ankle.ini*, since foot will warn about options it does not
+recognize.
+
 An example configuration file containing all options with their default value
-commented out will usually be installed to */etc/xdg/foot/foot.ini*.
+commented out will usually be installed to */etc/xdg/ankle/ankle.ini*.
 
 Options are set using KEY=VALUE pairs:
 
@@ -129,7 +138,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 	e.g. *line-height=12px*.
 	
 	*Warning*: when changing the font size at runtime (i.e. zooming in
-	or out), foot will change the line height by the same
+	or out), ankle will change the line height by the same
 	percentage. However, due to rounding, it is possible the line
 	height will be "too small" for some font sizes, causing
 	e.g. underscores to "disappear".
@@ -169,7 +178,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 	*underline-offset=2px*.
 	
 	If left unset (the default), the offset specified in the font is
-	used, or estimated by foot if the font lacks underline positioning
+	used, or estimated by ankle if the font lacks underline positioning
 	information.
 	
 	Default: _unset_.
@@ -199,7 +208,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 	Default: _unset_
 
 *gamma-correct-blending*
-	Boolean. When enabled, foot will do gamma-correct blending in
+	Boolean. When enabled, ankle will do gamma-correct blending in
 	linear color space. This is how font glyphs are supposed to be
 	rendered, but since nearly no applications or toolkits are doing
 	it on Linux, the result may not look like you are used to.
@@ -213,7 +222,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 	(OpenType, .otf) and disabled by default (in FreeType). You can
 	enable it by setting the environment variable
 	*FREETYPE_PROPERTIES="cff:no-stem-darkening=0"* before starting
-	foot.
+	ankle.
 	
 	Also be aware that many fonts have been developed on systems that
 	do not do gamma-correct blending, and may therefore look thicker
@@ -221,7 +230,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 	font designer set the font weight based on incorrect rendering.
 	
 	In order to represent colors faithfully, higher precision image
-	buffers are required. By default, foot will use either 16-bit, or
+	buffers are required. By default, ankle will use either 16-bit, or
 	10-bit color channels, depending on availability, when
 	gamma-correct blending is enabled. However, the high precision
 	buffers are slow; if you want to use gamma-correct blending, but
@@ -239,7 +248,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 	Default: _yes_
 
 *box-drawings-uses-font-glyphs*
-	Boolean. When disabled, foot generates box/line drawing characters
+	Boolean. When disabled, ankle generates box/line drawing characters
 	itself. There are several advantages to doing this instead of using
 	font glyphs:
 	
@@ -255,7 +264,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 	When enabled, box/line drawing characters are rendered using font
 	glyphs. This may result in a more uniform look, in some use cases.
 	
-	When disabled, foot will render the following Unicode codepoints
+	When disabled, ankle will render the following Unicode codepoints
 	by itself:
 	
 		- U+02500 - U+0259F
@@ -266,7 +275,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 	Default: _no_.
 
 *ligatures*
-	Boolean, or *except-cursor*. When enabled, foot shapes sequences of
+	Boolean, or *except-cursor*. When enabled, ankle shapes sequences of
 	characters together, allowing fonts to render ligatures (e.g. *->*
 	or *!=* drawn as a single symbol), and contextual alternates
 	(e.g. Monaspace's "texture healing").
@@ -275,7 +284,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 	it easier to see (and edit) the individual characters.
 	
 	Applications can toggle ligatures at run-time with the private mode
-	*767371* (see *foot-ctlseqs*(7)).
+	*767371* (see *ankle-ctlseqs*(7)).
 	
 	Which ligatures are used is controlled by the font's features. Most
 	fonts enable *calt* and *liga* by default; additional sets must be
@@ -297,7 +306,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 	
 	When set to *yes*, fonts are sized using the monitor's DPI, making
 	a font of a given size have the same physical size, regardless of
-	monitor. In other words, if you drag a foot window between
+	monitor. In other words, if you drag a ankle window between
 	different monitors, the font size remains the same.
 	
 	In this mode, the monitor's scaling factor is ignored; doubling
@@ -345,7 +354,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 	
 	When no centering is specified, the grid content is anchored to
 	the top left corner. I.e. if the window manager forces an odd
-	window size on foot, the additional pixels will be added to the
+	window size on ankle, the additional pixels will be added to the
 	right and bottom sides.
 	
 	If *center* is specified, the grid content is instead
@@ -360,13 +369,13 @@ empty string to be set, but it must be quoted: *KEY=""*
 
 *resize-delay-ms*
 
-	Time, in milliseconds, of "idle time" before foot performs text
+	Time, in milliseconds, of "idle time" before ankle performs text
 	reflow, and sends the new window dimensions to the client
-	application while doing an interactive resize of a foot
+	application while doing an interactive resize of a ankle
 	window. Idle time in this context is a period of time where the
 	window size is not changing.
 	
-	In other words, while you are fiddling with the window size, foot
+	In other words, while you are fiddling with the window size, ankle
 	does not send the updated dimensions to the client. It also does a
 	fast "truncating" resize of the grid, instead of actually
 	reflowing the contents. Only when you pause the fiddling for
@@ -416,8 +425,8 @@ empty string to be set, but it must be quoted: *KEY=""*
 	
 	Use the *color-theme-switch-dark*, *color-theme-switch-light* and
 	*color-theme-toggle* key bindings to switch between the two themes
-	at runtime, or send SIGUSR1/SIGUSR2 to the foot process (see
-	*foot*(1) for details).
+	at runtime, or send SIGUSR1/SIGUSR2 to the ankle process (see
+	*ankle*(1) for details).
 	
 	Default: _dark_
 
@@ -455,7 +464,7 @@ empty string to be set, but it must be quoted: *KEY=""*
 	*maximized* or *fullscreen*. Default: _windowed_.
 
 *title*
-	Initial window title. Default: _foot_.
+	Initial window title. Default: _ankle_.
 
 *locked-title*
 	Boolean. If enabled, applications are not allowed to change the
@@ -464,8 +473,8 @@ empty string to be set, but it must be quoted: *KEY=""*
 *app-id*
 	Value to set the *app-id* property on the Wayland window to. The
 	compositor can use this value to e.g. group multiple windows, or
-	apply window management rules. Default: _foot_ (normal mode), or
-	_footclient_ (server mode).
+	apply window management rules. Default: _ankle_ (normal mode), or
+	_ankleclient_ (server mode).
 
 *toplevel-tag*
 	Value to set the *toplevel-tag* property on the Wayland window
@@ -500,20 +509,20 @@ empty string to be set, but it must be quoted: *KEY=""*
 	some cases, the number of physical _cores_ is better.
 	
 	In case you have a ridiculous amount of cores and/or threads,
-	consider limiting the number of *workers*, since foot cannot
+	consider limiting the number of *workers*, since ankle cannot
 	parallelize more than the number of visible rows.
 
 *utmp-helper*
 	Path to utmp logging helper binary.
 	
-	When starting foot, an utmp record is created by launching the
+	When starting ankle, an utmp record is created by launching the
 	helper binary with the following arguments:
 	
 	```
 	@utmp_add_args@
 	```
 	
-	When foot is closed, the utmp record is removed by launching the
+	When ankle is closed, the utmp record is removed by launching the
 	helper binary with the following arguments:
 	
 	```
@@ -566,13 +575,13 @@ Note: do not set *TERM* here; use the *term* option in the main
 
 *system*
 	Boolean, when set to _yes_, ring the system bell. The bell is rung
-	independent of whether the foot window has keyboard focus or
+	independent of whether the ankle window has keyboard focus or
 	not. Exact behavior is compositor dependent.
 	
 	Default: _yes_
 
 *urgent*
-	Boolean, when set to _yes_, foot will signal urgency to the
+	Boolean, when set to _yes_, ankle will signal urgency to the
 	compositor through the XDG activation protocol whenever *BEL* is
 	received, and the window does NOT have keyboard focus.
 	
@@ -585,7 +594,7 @@ Note: do not set *TERM* here; use the *term* option in the main
 	Default: _no_
 
 *notify*
-	Boolean, when set to _yes_, foot will emit a desktop notification
+	Boolean, when set to _yes_, ankle will emit a desktop notification
 	using the command specified in the *notify* option whenever *BEL*
 	is received. By default, bell notifications are shown only when
 	the window does *not* have keyboard focus. See
@@ -594,11 +603,11 @@ Note: do not set *TERM* here; use the *term* option in the main
 	Default: _no_
 
 *visual*
-	Boolean, when set to _yes_, foot will flash the terminal
+	Boolean, when set to _yes_, ankle will flash the terminal
 	window. Default: _no_
 
 *command*
-	When set, foot will execute this command when *BEL* is received.
+	When set, ankle will execute this command when *BEL* is received.
 	Default: none
 
 *command-focused*
@@ -615,8 +624,8 @@ Note: do not set *TERM* here; use the *term* option in the main
 		notification's actual _title_ and _body_ (message content).
 		
 		_${app-id}_ is replaced with the value of the command line
-		option _--app-id_, and defaults to *foot* (normal mode), or
-		*footclient* (server mode).
+		option _--app-id_, and defaults to *ankle* (normal mode), or
+		*ankleclient* (server mode).
 		
 		_${window-title}_ is replaced with the current window title.
 		
@@ -639,7 +648,7 @@ Note: do not set *TERM* here; use the *term* option in the main
 		
 		_${replace-id}_ is replaced by the notification daemon
 		assigned ID that the notification replaces/updates. For this
-		to work, foot needs to know the externally assigned IDs of
+		to work, ankle needs to know the externally assigned IDs of
 		previously emitted notifications, see the 'stdout' section
 		below. Can be used together with e.g. notify-send's
 		*--replace-id* option.
@@ -651,14 +660,14 @@ Note: do not set *TERM* here; use the *term* option in the main
 		
 		_${sound-name}_ is replaced by sound-name requested by the
 		notification. This should be a name from the freedesktop sound
-		naming specification, but this is not something that foot
+		naming specification, but this is not something that ankle
 		enforces. It is intended to set the *sound-name* hint (with
 		e.g. notify-send's *--hint* option).
 		
 		_${action-argument}_ will be expanded to the
 		*command-action-argument* option, for each notification
 		action. There will always be at least one action, the
-		"default" action. Foot uses this to enable window focusing,
+		"default" action. Ankle uses this to enable window focusing,
 		and reporting notification activation to applications that
 		requested such events.
 		
@@ -673,12 +682,12 @@ Note: do not set *TERM* here; use the *term* option in the main
 		  example; this protocol has lots of features, see
 		  https://sw.kovidgoyal.net/kitty/desktop-notifications)
 		
-		By default, notifications are *inhibited* if the foot window
+		By default, notifications are *inhibited* if the ankle window
 		has keyboard focus. See
 		_desktop-notifications.inhibit-when-focused_.
 	
 	Window activation (focusing)
-		Foot can focus the window when the notification is
+		Ankle can focus the window when the notification is
 		'activated'. It can also send an event back to the client
 		application, notifying it that the notification has been
 		'activated', This typically happens when the default action is
@@ -686,24 +695,24 @@ Note: do not set *TERM* here; use the *term* option in the main
 		behavior depends on the notification daemon in use, and how it
 		has been configured.
 		
-		For this to work, foot needs to know when the notification was
+		For this to work, ankle needs to know when the notification was
 		activated (as opposed to just dismissed), and it needs an XDG
 		activation token.
 		
 		There are two parts to handle this. First, the notification
-		must define an action. For this purpose, foot will add a
+		must define an action. For this purpose, ankle will add a
 		"default" action to the notification (see the
 		*command-action-argument* option).
 		
-		Second, foot needs to know when the notification is activated,
+		Second, ankle needs to know when the notification is activated,
 		and it needs to get hold of the XDG activation token.
 		
 		Both are expected to be printed on stdout.
 		
-		Foot expects the action name (not label) to be printed on a
+		Ankle expects the action name (not label) to be printed on a
 		single line. No prefix, no postfix.
 		
-		Foot expects the activation token to be printed on a single
+		Ankle expects the activation token to be printed on a single
 		line, prefixed with *xdgtoken=*.
 		
 		Example:
@@ -711,14 +720,14 @@ Note: do not set *TERM* here; use the *term* option in the main
 xdgtoken=18179adf579a7a904ce73754964b1ec3
 		
 		The expected format of stdout may change at any time. Please
-		read the changelog when upgrading foot.
+		read the changelog when upgrading ankle.
 		
 		*Note*: notify-send does not, out of the box, support
 		reporting the XDG activation token in any way. This means
 		window activation will not work by default.
 	
 	Stdout
-		Foot recognizes the following things from the notification
+		Ankle recognizes the following things from the notification
 		helper's stdout:
 		
 		- _id_: integer in base 10, daemon assigned notification ID
@@ -735,7 +744,7 @@ xdgtoken=18179adf579a7a904ce73754964b1ec3
 action=default++
 xdgtoken=95ebdfe56e4f47ddb5bba9d7dc3a2c35
 		
-			Foot recognizes this as:
+			Ankle recognizes this as:
 			- notification has the daemon assigned ID 17
 			- the user triggered the default action
 			- the notification sent an XDG activation token
@@ -744,7 +753,7 @@ xdgtoken=95ebdfe56e4f47ddb5bba9d7dc3a2c35
 			17++
 1
 		
-			Foot recognizes this as:
+			Ankle recognizes this as:
 			- notification has the daemon assigned ID 17
 			- the user triggered the first custom action, "1"
 		
@@ -752,7 +761,7 @@ xdgtoken=95ebdfe56e4f47ddb5bba9d7dc3a2c35
 			id=17++
 1
 		
-			Foot recognizes this as:
+			Ankle recognizes this as:
 			- notification has the daemon assigned ID 17
 			- the user triggered the first custom action, "1"
 	
@@ -791,21 +800,21 @@ xdgtoken=95ebdfe56e4f47ddb5bba9d7dc3a2c35
 	String to use with *command* to enable passing action/button names
 	to the notification helper.
 
-	Foot will always configure a "default" action that can be used to
-	"activate" the notification, which in turn can cause the foot
+	Ankle will always configure a "default" action that can be used to
+	"activate" the notification, which in turn can cause the ankle
 	window to be focused, or an escape to be sent to the terminal
 	application (depending on how the application generated the
 	notification).
 	
 	Furthermore, the OSC-99 notifications protocol allows applications
-	to define their own actions. Foot uses a combination of the
+	to define their own actions. Ankle uses a combination of the
 	*command* option, and the *command-action-argument* option to pass
 	the names of the actions to the notification helper.
 	
 	This option has the following template arguments:
 	
 	- _${action-name}_: the name of the action; *default* for the
-	  default action configured by foot, and _n_, where _n_ is an
+	  default action configured by ankle, and _n_, where _n_ is an
 	  integer >= 1, for application defined actions.
 	- _${action-label}_: *Activate* for the default action, and a
 	  free-form string for application defined actions.
@@ -829,7 +838,7 @@ xdgtoken=95ebdfe56e4f47ddb5bba9d7dc3a2c35
 	Assume the application defined two custom actions: *OK* and
 	*Cancel*.
 	
-	Given the above, foot will execute:
+	Given the above, ankle will execute:
 	
 		notify-send++
 			--action default='Click to activate'++
@@ -850,7 +859,7 @@ xdgtoken=95ebdfe56e4f47ddb5bba9d7dc3a2c35
 	Closing a notification is only supported by the Kitty Desktop
 	Notification protocol, OSC-99.
 	
-	If set to the empty string (the default), foot will instead try to
+	If set to the empty string (the default), ankle will instead try to
 	close the notification by sending SIGINT to the notification
 	helper process. For example, *notify-send --wait* (libnotify >=
 	0.8.0) responds to SIGINT by closing the notification.
@@ -858,7 +867,7 @@ xdgtoken=95ebdfe56e4f47ddb5bba9d7dc3a2c35
 	Default: _not set_
 
 *inhibit-when-focused*
-	Boolean. If enabled, foot will not display notifications if the
+	Boolean. If enabled, ankle will not display notifications if the
 	terminal window has keyboard focus.
 	
 	Default: _yes_
@@ -1063,7 +1072,7 @@ can configure the background transparency with the _alpha_ option.
 *colors-light* is intended to define a light color theme. You can
 switch between them using the *color-theme-switch-dark*,
 *color-theme-switch-light* and *color-theme-toggle* key bindings, or
-by sending SIGUSR1/SIGUSR2 to the foot process.
+by sending SIGUSR1/SIGUSR2 to the ankle process.
 
 The default theme used is *colors-dark*, unless
 *initial-color-theme=light* has been set.
@@ -1102,13 +1111,13 @@ The default theme used is *colors-dark*, unless
 	an entry in the color palette. Applications emit them by combining
 	a color value, and a "dim" attribute.
 	
-	By default, foot implements this by blending the current color
+	By default, ankle implements this by blending the current color
 	with black or white, depending on what the *dim-blend-towards*
 	option is set to . This is a generic approach that applies to both
 	colors from the 256-color palette, as well as 24-bit RGB colors.
 	
 	You can change this behavior by setting the *dimN* options. When
-	set, foot will match the current color against the color palette,
+	set, ankle will match the current color against the color palette,
 	and if it matches one of the *regularN* colors, the corresponding
 	*dimN* color will be used.
 	
@@ -1123,8 +1132,8 @@ The default theme used is *colors-dark*, unless
 	Note that applications can change the *regularN* and *brightN*
 	colors at runtime. However, they have no way of changing the
 	*dimN* colors. If an application has changed the *regularN*
-	colors, foot will still use the corresponding *dimN* color, as
-	configured in foot.ini.
+	colors, ankle will still use the corresponding *dimN* color, as
+	configured in ankle.ini.
 	
 	Default: _not set_.
 
@@ -1160,7 +1169,7 @@ The default theme used is *colors-dark*, unless
 	Default: _default_
 
 *blur*
-	Boolean. When enabled, foot will blur the background (main window
+	Boolean. When enabled, ankle will blur the background (main window
 	only, not CSDs etc), when it is transparent. This feature requires
 	the compositor to implement the _ext-background-effect-v1_
 	protocol (and specifically, the _blur_ effect).
@@ -1235,7 +1244,7 @@ Examples:
 	
 	Note that this is only a hint to the compositor. Depending on
 	compositor support, and how it has been configured, it may
-	instruct foot to use CSDs even though this option has been set to
+	instruct ankle to use CSDs even though this option has been set to
 	*server*, or render SSDs despite *client* or *none* being set.
 	
 	Default: _server_.
@@ -1312,27 +1321,27 @@ etc), but "virtual" modifiers (*Alt*, *Super* etc) are allowed.
 
 *xkbcli interactive-wayland* can be useful for finding keysym names.
 
-When matching key presses to key bindings, foot uses a couple of
+When matching key presses to key bindings, ankle uses a couple of
 different approaches.
 
 As an example, let's say you press ctrl+shift+c (assume plain us ASCII
-layout). XKB will tell foot *Control+C* was pressed. Note the lack of
+layout). XKB will tell ankle *Control+C* was pressed. Note the lack of
 the shift modifier, and the upper case 'C'. Internally, this is called
 the "translated" form.
 
 The "untranslated" form (*Control+Shift+c*) is derived from the
-translated form, and is what foot tries to match first.
+translated form, and is what ankle tries to match first.
 
-If no "untranslated" key bindings can be found, foot proceeds to
+If no "untranslated" key bindings can be found, ankle proceeds to
 checking the "translated" variant.
 
-This means you can use either form in your foot configuration, and
+This means you can use either form in your ankle configuration, and
 that *Control+Shift+c* (and similar) has higher priority than
-*Control+C*. Also note that while foot normally detects when the same
+*Control+C*. Also note that while ankle normally detects when the same
 combination is assigned to multiple actions, it will not detect
 *Control+C* vs. *Control+Shift+c* collisions. Call it a known bug...
 
-Finally, foot tries to match the raw key code. Here, the primary
+Finally, ankle tries to match the raw key code. Here, the primary
 layout is queried for all key codes that generate a particular XKB
 symbol, and the pressed key's code is matched against this. For
 example, if you use the layouts *"us,de(neo)"*, the 'r' key generates
@@ -1436,8 +1445,8 @@ e.g. *search-start=none*.
 *pipe-visible=[sh -c "xurls | uniq | tac | fuzzel | xargs -r firefox"] Control+Print*
 	
 	Example #2:
-		# Open scrollback contents in Emacs running in a new foot instance++
-*pipe-scrollback=[sh -c "f=$(mktemp) && cat - > $f && foot emacsclient -t $f; rm $f"] Control+Shift+Print*
+		# Open scrollback contents in Emacs running in a new ankle instance++
+*pipe-scrollback=[sh -c "f=$(mktemp) && cat - > $f && ankle emacsclient -t $f; rm $f"] Control+Shift+Print*
 	
 	Default: _none_
 
@@ -1484,11 +1493,11 @@ e.g. *search-start=none*.
 
 *prompt-prev*
 	Jump to the previous, currently not visible, prompt (requires
-	shell integration, see *foot*(1)). Default: _Control+Shift+z_.
+	shell integration, see *ankle*(1)). Default: _Control+Shift+z_.
 
 *prompt-next*
 	Jump to the next prompt (requires shell integration, see
-	*foot*(1)). Default: _Control+Shift+x_.
+	*ankle*(1)). Default: _Control+Shift+x_.
 
 *unicode-input*
 	Input a Unicode character by typing its codepoint in hexadecimal,
@@ -1510,7 +1519,7 @@ e.g. *search-start=none*.
 	- Backspace: undo the last digit.
 	
 	Note that there is no visual feedback while in this mode. This is
-	by design; foot's Unicode input mode is considered to be a
+	by design; ankle's Unicode input mode is considered to be a
 	fallback. The preferred way of entering Unicode characters, emojis
 	etc is by using an IME.
 	
@@ -1530,13 +1539,13 @@ e.g. *search-start=none*.
 	*color-theme-toggle* toggles between the primary and alternative
 	color themes.
 	
-	Note: you can also send SIGUSR1/SIGUSR2 to the foot process to
-	change the theme (see *foot*(1) for details.)
+	Note: you can also send SIGUSR1/SIGUSR2 to the ankle process to
+	change the theme (see *ankle*(1) for details.)
 	
 	Default: _none_
 
 *quit*
-	Quit foot. Default: _none_.
+	Quit ankle. Default: _none_.
 
 # SECTION: search-bindings
 
@@ -1722,7 +1731,7 @@ specify a character:
 Example: you would like to remap _Super+k_ to the _Up_ key.
 
 The escape sequence for the Up key is _ESC [ A_ (without the
-spaces). Thus, we need to specify this in foot.ini (*Mod4* is the XKB
+spaces). Thus, we need to specify this in ankle.ini (*Mod4* is the XKB
 name for the Super/logo key):
 
 *\\x1b[A = Mod4+k*
@@ -1751,7 +1760,7 @@ To map wheel events (i.e. scrolling), use the button names
 events never generate a *COUNT* larger than 1. That is,
 *BTN_WHEEL_BACK+2*, for example, will never trigger.
 
-Foot also recognizes tiltable wheels; to map these, use
+Ankle also recognizes tiltable wheels; to map these, use
 *BTN_WHEEL_LEFT* and *BTN_WHEEL_RIGHT*.
 
 A modifier+button combination can only be mapped to *one* action. Let's
@@ -1835,7 +1844,7 @@ actions listed under *key-bindings* can be used here as well.
 	Notes:
 	- Escaped quote characters are not supported (*"foo \\"bar"* will
 	  match *'foo \\'*, not *'foo "bar'*).
-	- Foot does not try to handle mismatched quote characters; they
+	- Ankle does not try to handle mismatched quote characters; they
 	  will simply not match.
 	- Nested quotes (using different quote characters) are supported.
 	
@@ -1873,7 +1882,7 @@ actions listed under *key-bindings* can be used here as well.
 # TWEAK
 
 This section is for advanced users and describes configuration options
-that can be used to tweak foot's low-level behavior.
+that can be used to tweak ankle's low-level behavior.
 
 These options are *not* included in the example configuration. You
 should not change these unless you understand what they do.
@@ -1952,10 +1961,10 @@ any of these options.
 	
 	The problem with this is twofold - first, it has not yet been
 	standardized, and thus there are not many terminal emulators that
-	implement it (foot *does* implement it), and second, applications
+	implement it (ankle *does* implement it), and second, applications
 	must be patched to use it.
 	
-	Until this has happened, foot offers an interim workaround; an
+	Until this has happened, ankle offers an interim workaround; an
 	attempt to mitigate the screen flicker *without* affecting either
 	performance or latency.
 	
@@ -1967,12 +1976,12 @@ any of these options.
 	without causing a frame skip.
 	
 	While it should be possible to estimate the amount of time left
-	until the next frame, foot's algorithm is currently not that
+	until the next frame, ankle's algorithm is currently not that
 	advanced, but is based on statistics I guess you could say - the
 	delay we introduce is so small that the risk of pushing the frame
 	over to the next frame interval is also very small.
 	
-	Now, that was a lot of text. But what is it foot actually does?
+	Now, that was a lot of text. But what is it ankle actually does?
 	
 	When receiving client data, it schedules a timer, the
 	*delayed-render-lower*. If we do not receive any more client data
@@ -1983,14 +1992,14 @@ any of these options.
 	
 	Now, while this works very well with most clients, it would be
 	possible to construct a malicious client that keeps writing data
-	at a slow pace. To the user, this would look like foot has frozen
+	at a slow pace. To the user, this would look like ankle has frozen
 	as we never get to render a new frame. To prevent this, an upper
 	limit is set - *delayed-render-upper*. If this timer runs out, we
 	render the frame regardless of what the client is doing.
 	
 	If changing these values, note that the lower timeout *must* be
 	set lower than the upper timeout, but that this is not verified by
-	foot. Furthermore, both values must be less than 16ms (that is,
+	ankle. Furthermore, both values must be less than 16ms (that is,
 	16000000 nanoseconds).
 	
 	You can disable the feature altogether by setting either value to
@@ -2000,22 +2009,22 @@ any of these options.
 	frame interval).
 
 *damage-whole-window*
-	Boolean. When enabled, foot will 'damage' the entire window each
+	Boolean. When enabled, ankle will 'damage' the entire window each
 	time a frame has been rendered. This forces the compositor to
-	redraw the entire window. If disabled, foot will only 'damage'
+	redraw the entire window. If disabled, ankle will only 'damage'
 	updated rows.
 	
 	There is normally *no* reason to enable this. However, it has been
 	seen to workaround an issue with _fractional scaling_ in _Gnome_.
 	
 	Note that enabling this option is likely to increase CPU and/or
-	GPU usage (by the compositor, not by foot), and may have a
+	GPU usage (by the compositor, not by ankle), and may have a
 	negative impact on battery life.
 	
 	Default: _no_.
 
 *grapheme-shaping*
-	Boolean. When enabled, foot will use _utf8proc_ to do grapheme
+	Boolean. When enabled, ankle will use _utf8proc_ to do grapheme
 	cluster segmentation while parsing "printed" text. Then, when
 	rendering, it will use _fcft_ (if compiled with _HarfBuzz_
 	support) to shape the grapheme clusters.
@@ -2025,7 +2034,7 @@ any of these options.
 	and emoji tag sequences. It might also improve rendering of
 	composed characters, depending on font.
 	
-		- foot must have been compiled with utf8proc support
+		- ankle must have been compiled with utf8proc support
 		- fcft must have been compiled with HarfBuzz support
 	
 	This option can also be set runtime with DECSET/DECRST 2027.
@@ -2053,10 +2062,10 @@ any of these options.
 	Default: _double-width_
 
 *font-monospace-warn*
-	Boolean. When enabled, foot will use heuristics to try to verify
+	Boolean. When enabled, ankle will use heuristics to try to verify
 	the primary font is a monospace font, and warn if it is not.
 	
-	Disable this if you still want to use the font, even if foot
+	Disable this if you still want to use the font, even if ankle
 	thinks it is not monospaced.
 	
 	You may also want to disable it to get slightly faster startup times.
@@ -2068,9 +2077,9 @@ any of these options.
 	the pixmap memory to which the terminal screen content is
 	rendered.
 	
-	It does not change how much physical memory foot uses.
+	It does not change how much physical memory ankle uses.
 	
-	Foot uses a memory mapping trick to implement fast rendering of
+	Ankle uses a memory mapping trick to implement fast rendering of
 	interactive scrolling (typically, but applies to "slow" scrolling
 	in general). Example: holding down the 'up' or 'down' arrow key to
 	scroll in a text editor.
@@ -2082,7 +2091,7 @@ any of these options.
 	address space, and newer ones have 64PB. This is an insane amount
 	and most applications do not use anywhere near that amount.
 	
-	Each foot terminal window can allocate up to 2GB of virtual
+	Each ankle terminal window can allocate up to 2GB of virtual
 	address space. With 128TB of address space, that means a maximum
 	of 65536 windows in server/daemon mode (for 2GB). That should be
 	enough, yes?
@@ -2111,7 +2120,7 @@ any of these options.
 	This option controls the minimum stride alignment, in bytes, when
 	allocating SHM buffers.
 	
-	In some circumstances, a compositor can import foot's SHM buffers
+	In some circumstances, a compositor can import ankle's SHM buffers
 	directly to the GPU, without copying the buffer to GPU memory
 	(typically on integrated graphics). Different drivers have
 	different requirements for this, and one of those requirements is
@@ -2119,8 +2128,8 @@ any of these options.
 	require 256-byte alignment.
 	
 	Note that doing a direct import typically disables immediate
-	buffer release (if the compositor supports that), which means foot
-	has to double buffer. This adds a performance penalty in foot, but
+	buffer release (if the compositor supports that), which means ankle
+	has to double buffer. This adds a performance penalty in ankle, but
 	the overall system performance should still be better.
 	
 	If you are not using integrated graphics, or if the compositor
@@ -2134,7 +2143,7 @@ any of these options.
 	Default: _256_
 
 *sixel*
-	Boolean. When enabled, foot will process sixel images. Default:
+	Boolean. When enabled, ankle will process sixel images. Default:
 	_yes_
 
 *dim-amount*
@@ -2170,31 +2179,31 @@ any of these options.
 	Default: _auto_
 
 *pre-apply-damage*
-	Boolean. When enabled, foot will attempt to "pre-apply" the damage
-	from the last frame when foot is forced to double-buffer
+	Boolean. When enabled, ankle will attempt to "pre-apply" the damage
+	from the last frame when ankle is forced to double-buffer
 	(i.e. when the compositor does not release SHM buffers
 	immediately). All text after this assumes the compositor is not
 	releasing buffers immediately.
 	
-	When this option is disabled, each time foot needs to render a
+	When this option is disabled, each time ankle needs to render a
 	frame, it has to first copy over areas that changed in the last
 	frame (i.e. all changes between the last two frames). This is
 	basically a *memcpy*(3), which can be slow if the changed area is
-	large. It is also done on the main thread, which means foot cannot
+	large. It is also done on the main thread, which means ankle cannot
 	do anything else at the same time; no other rendering, no VT
 	parsing. After the changes have been brought over to the new
-	frame, foot proceeds with rendering the cells that has changed
+	frame, ankle proceeds with rendering the cells that has changed
 	between the last frame and the new frame.
 	
 	When this option is enabled, the changes between the last two frames
-	are brought over to what will become the next frame before foot
+	are brought over to what will become the next frame before ankle
 	starts rendering the next frame. As soon as the compositor
-	releases the previous buffer (typically right after foot has
-	pushed a new frame), foot kicks off a thread that copies over the
+	releases the previous buffer (typically right after ankle has
+	pushed a new frame), ankle kicks off a thread that copies over the
 	changes to the newly released buffer. Since this is done in a
-	thread, foot can continue processing input at the same
+	thread, ankle can continue processing input at the same
 	time. Later, when it is time to render a new frame, the changes
-	have already been transferred, and foot can immediately start with
+	have already been transferred, and ankle can immediately start with
 	the actual rendering.
 	
 	Thus, having this option enabled improves both performance
@@ -2206,4 +2215,4 @@ any of these options.
 
 # SEE ALSO
 
-*foot*(1), *footclient*(1)
+*ankle*(1), *ankleclient*(1)

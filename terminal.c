@@ -3784,8 +3784,8 @@ term->window_icon != NULL
         ? term->window_icon
         :
         #endif
-        streq(app_id, "footclient")
-            ? "foot"
+        streq(app_id, "ankleclient")
+            ? "ankle"
             : app_id;
 }
 

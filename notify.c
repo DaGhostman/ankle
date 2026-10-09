@@ -58,7 +58,7 @@ write_icon_file(const void *data, size_t data_sz, int *fd, char **filename,
     xassert(*filename == NULL);
     xassert(*symbolic_name == NULL);
 
-    char name[64] = "/tmp/foot-notification-icon-XXXXXX";
+    char name[64] = "/tmp/ankle-notification-icon-XXXXXX";
 
     *filename = NULL;
     *symbolic_name = NULL;

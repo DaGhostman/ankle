@@ -418,31 +418,53 @@ struct config_file {
     int fd;           /* FD of file, O_RDONLY */
 };
 
+/*
+ * Config file names, in order of preference. foot's config is used as
+ * a fallback, to make it easy to switch from foot.
+ */
+static const char *const config_names[] = {
+    "/ankle/ankle.ini",
+    "/foot/foot.ini",
+};
+
+static bool
+try_open_config(const char *dir, const char *name, struct config_file *ret)
+{
+    char *path = xstrjoin(dir, name);
+
+    LOG_DBG("checking for %s", path);
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+
+    if (fd < 0) {
+        free(path);
+        return false;
+    }
+
+    *ret = (struct config_file){.path = path, .fd = fd};
+    return true;
+}
+
 static struct config_file
 open_config(void)
 {
-    char *path = NULL;
     struct config_file ret = {.path = NULL, .fd = -1};
 
     const char *xdg_config_home = getenv("XDG_CONFIG_HOME");
     const char *xdg_config_dirs = getenv("XDG_CONFIG_DIRS");
     const char *home_dir = getenv("HOME");
+    char *user_config_dir = NULL;
     char *xdg_config_dirs_copy = NULL;
 
     /* First, check XDG_CONFIG_HOME (or .config, if unset) */
     if (xdg_config_home != NULL && xdg_config_home[0] != '\0')
-        path = xstrjoin(xdg_config_home, "/foot/foot.ini");
+        user_config_dir = xstrdup(xdg_config_home);
     else if (home_dir != NULL)
-        path = xstrjoin(home_dir, "/.config/foot/foot.ini");
+        user_config_dir = xstrjoin(home_dir, "/.config");
 
-    if (path != NULL) {
-        LOG_DBG("checking for %s", path);
-        int fd = open(path, O_RDONLY | O_CLOEXEC);
-
-        if (fd >= 0) {
-            ret = (struct config_file) {.path = path, .fd = fd};
-            path = NULL;
-            goto done;
+    if (user_config_dir != NULL) {
+        for (size_t i = 0; i < ALEN(config_names); i++) {
+            if (try_open_config(user_config_dir, config_names[i], &ret))
+                goto done;
         }
     }
 
@@ -453,25 +475,27 @@ open_config(void)
     if (xdg_config_dirs_copy == NULL || xdg_config_dirs_copy[0] == '\0')
         goto done;
 
-    for (const char *conf_dir = strtok(xdg_config_dirs_copy, ":");
-         conf_dir != NULL;
-         conf_dir = strtok(NULL, ":"))
-    {
-        free(path);
-        path = xstrjoin(conf_dir, "/foot/foot.ini");
+    /* Prefer ankle's config in all system directories over foot's */
+    for (size_t i = 0; i < ALEN(config_names); i++) {
+        char *dirs = xstrdup(xdg_config_dirs_copy);
+        char *saveptr = NULL;
 
-        LOG_DBG("checking for %s", path);
-        int fd = open(path, O_RDONLY | O_CLOEXEC);
-        if (fd >= 0) {
-            ret = (struct config_file){.path = path, .fd = fd};
-            path = NULL;
-            goto done;
+        for (const char *conf_dir = strtok_r(dirs, ":", &saveptr);
+             conf_dir != NULL;
+             conf_dir = strtok_r(NULL, ":", &saveptr))
+        {
+            if (try_open_config(conf_dir, config_names[i], &ret)) {
+                free(dirs);
+                goto done;
+            }
         }
+
+        free(dirs);
     }
 
 done:
     free(xdg_config_dirs_copy);
-    free(path);
+    free(user_config_dir);
     return ret;
 }
 
@@ -2910,7 +2934,7 @@ parse_section_tweak(struct context *ctx)
 #if !defined(FOOT_GRAPHEME_CLUSTERING)
         if (conf->tweak.grapheme_shaping) {
             LOG_CONTEXTUAL_WARN(
-                "foot was not compiled with support for grapheme shaping");
+                "ankle was not compiled with support for grapheme shaping");
             conf->tweak.grapheme_shaping = false;
         }
 #endif
@@ -3361,14 +3385,14 @@ get_server_socket_path(void)
 {
     const char *xdg_runtime = getenv("XDG_RUNTIME_DIR");
     if (xdg_runtime == NULL)
-        return xstrdup("/tmp/foot.sock");
+        return xstrdup("/tmp/ankle.sock");
 
     const char *wayland_display = getenv("WAYLAND_DISPLAY");
     if (wayland_display == NULL) {
-        return xstrjoin(xdg_runtime, "/foot.sock");
+        return xstrjoin(xdg_runtime, "/ankle.sock");
     }
 
-    return xasprintf("%s/foot-%s.sock", xdg_runtime, wayland_display);
+    return xasprintf("%s/ankle-%s.sock", xdg_runtime, wayland_display);
 }
 
 static config_modifier_list_t
@@ -3531,8 +3555,8 @@ config_load(struct config *conf, const char *conf_path,
         .conf_path = (conf_path ? xstrdup(conf_path) : NULL),
         .term = xstrdup(FOOT_DEFAULT_TERM),
         .shell = get_shell(),
-        .title = xstrdup("foot"),
-        .app_id = (as_server ? xstrdup("footclient") : xstrdup("foot")),
+        .title = xstrdup("ankle"),
+        .app_id = (as_server ? xstrdup("ankleclient") : xstrdup("ankle")),
         .toplevel_tag = xstrdup(""),
         .word_delimiters = xc32dup(U",│`|:\"'()[]{}<>"),
         .size = {

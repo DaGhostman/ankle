@@ -1,5 +1,5 @@
-# Bash completion script for footclient
-_footclient()
+# Bash completion script for ankle
+_ankle()
 {
     COMPREPLY=()
 
@@ -7,16 +7,21 @@ _footclient()
     flags=(
         "--app-id"
         "--toplevel-tag"
+        "--check-config"
+        "--config"
+        "--font"
         "--fullscreen"
         "--help"
         "--hold"
-        "--login-shell"
-        "--log-level"
         "--log-colorize"
+        "--log-level"
+        "--log-no-syslog"
+        "--login-shell"
         "--maximized"
         "--override"
-        "--client-environment"
-        "--server-socket"
+        "--print-pid"
+        "--pty"
+        "--server"
         "--term"
         "--title"
         "--version"
@@ -31,12 +36,12 @@ _footclient()
     # Check if positional argument is completed
     previous_words=( "${COMP_WORDS[@]}" )
     unset previous_words[-1]
-    commands=$(compgen -c | grep -vFx "$(compgen -k)" | grep -vE '^([.:[]|footclient)$' | sort -u)
+    commands=$(compgen -c | grep -vFx "$(compgen -k)" | grep -vE '^([.:[]|ankle)$' | sort -u)
     i=0
     for word in "${previous_words[@]}" ; do
         match=$(printf "$commands" | grep -Fx "$word" 2>/dev/null)
         if [[ ! -z "$match" ]] ; then
-            if [[ ${COMP_WORDS[i-1]} =~ ^(--app-id|--toplevel-tag|--log-level|--server-socket|--term|--title|--window-size-pixels|--window-size-chars|--working-directory)$ ]] ; then
+            if [[ ${COMP_WORDS[i-1]} =~ ^(--app-id|--toplevel-tag|--config|--font|--log-level|--pty|--term|--title|--window-size-pixels|--window-size-chars|--working-directory)$ ]] ; then
                 (( i++ ))
                 continue
             fi
@@ -57,18 +62,21 @@ _footclient()
     fi
 
     case "$prev" in
-    --server-socket|-s)
+    --config|--print-pid|--server|-[cps])
         compopt -o default ;;
     --working-directory|-D)
         compopt -o dirnames ;;
     --term|-t)
         command -v toe > /dev/null || return 1
-        COMPREPLY=( $(compgen -W "$(toe -a | awk '$1 ~ /[+]/ {next}; {print $1}')" -- ${cur}) )  ;;
+        COMPREPLY=( $(compgen -W "$(toe -a | awk '$1 !~ /[+]/ {print $1}')" -- ${cur}) ) ;;
+    --font|-f)
+        command -v fc-list > /dev/null || return 1
+        COMPREPLY=( $(compgen -W "$(fc-list : family | sed 's/,/\n/g' | uniq | tr -d ' ')" -- ${cur}) ) ;;
     --log-level|-d)
         COMPREPLY=( $(compgen -W "none error warning info" -- ${cur}) ) ;;
     --log-colorize|-l)
         COMPREPLY=( $(compgen -W "never always auto" -- ${cur}) ) ;;
-    --app-id|--toplevel-tag|--help|--override|--title|--version|--window-size-chars|--window-size-pixels|-[ahoTvWw])
+    --app-id|--toplevel-tag|--help|--override|--pty|--title|--version|--window-size-chars|--window-size-pixels|--check-config|-[ahoTvWwC])
         # Don't autocomplete for these flags
         : ;;
     *)
@@ -79,4 +87,4 @@ _footclient()
     return 0
 }
 
-complete -F _footclient footclient
+complete -F _ankle ankle

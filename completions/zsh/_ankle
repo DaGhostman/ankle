@@ -1,14 +1,14 @@
-#compdef foot
+#compdef ankle
 
 _arguments \
     -s -S -C \
-    '(-c --config)'{-c,--config}'[path to configuration file (XDG_CONFIG_HOME/foot/foot.ini)]:config:_files' \
+    '(-c --config)'{-c,--config}'[path to configuration file (XDG_CONFIG_HOME/ankle/ankle.ini)]:config:_files' \
     '(-C --check-config)'{-C,--check-config}'[verify configuration and exit with 0 if ok, otherwise exit with 1]' \
     '(-o --override)'{-o,--override}'[configuration option to override, in form SECTION.KEY=VALUE]:()' \
     '(-f --font)'{-f,--font}'[font name and style in fontconfig format (monospace)]:font:->fonts' \
     '(-t --term)'{-t,--term}'[value to set the environment variable TERM to (foot)]:term:->terms' \
     '(-T --title)'{-T,--title}'[initial window title]:()' \
-    '(-a --app-id)'{-a,--app-id}'[value to set the app-id property on the Wayland window to (foot)]:()' \
+    '(-a --app-id)'{-a,--app-id}'[value to set the app-id property on the Wayland window to (ankle)]:()' \
     '--toplevel-tag=[value to set the toplevel-tag property on the Wayland window to]:()' \
     '(-m --maximized)'{-m,--maximized}'[start in maximized mode]' \
     '(-F --fullscreen)'{-F,--fullscreen}'[start in fullscreen mode]' \
@@ -16,7 +16,7 @@ _arguments \
     '(-D --working-directory)'{-D,--working-directory}'[initial working directory for the client application (CWD)]:working_directory:_files' \
     '(-w --window-size-pixels)'{-w,--window-size-pixels}'[window WIDTHxHEIGHT, in pixels (700x500)]:size_pixels:()' \
     '(-W --window-size-chars)'{-W,--window-size-chars}'[window WIDTHxHEIGHT, in characters (not set)]:size_chars:()' \
-    '(-s --server)'{-s,--server}'[run as server; open terminals by running footclient]:server:_files' \
+    '(-s --server)'{-s,--server}'[run as server; open terminals by running ankleclient]:server:_files' \
     '(-H --hold)'{-H,--hold}'[remain open after child process exits]' \
     '(-p --print-pid)'{-p,--print-pid}'[print PID to this file or FD when up and running (server mode only)]:pidfile:_files' \
     '--pty=[display an existing pty instead of creating one]:pty:_files' \

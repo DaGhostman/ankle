@@ -158,7 +158,7 @@ emit_one_notification(int fd, const struct user_notification *notif)
     xassert(prefix != NULL);
 
     if (write(fd, prefix, strlen(prefix)) < 0 ||
-        write(fd, "foot: ", 6) < 0 ||
+        write(fd, "ankle: ", 7) < 0 ||
         write(fd, notif->text, strlen(notif->text)) < 0 ||
         write(fd, postfix, strlen(postfix)) < 0)
     {

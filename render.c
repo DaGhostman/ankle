@@ -2525,7 +2525,7 @@ render_worker_thread(void *_ctx)
     pthread_sigmask(SIG_SETMASK, &mask, NULL);
 
     char proc_title[16];
-    snprintf(proc_title, sizeof(proc_title), "foot:render:%d", my_id);
+    snprintf(proc_title, sizeof(proc_title), "ankle:render:%d", my_id);
 
     if (pthread_setname_np(pthread_self(), proc_title) < 0)
         LOG_ERRNO("render worker %d: failed to set process title", my_id);
@@ -4651,7 +4651,7 @@ render_update_title(struct terminal *term)
 {
     static const size_t max_len = 2048;
 
-    const char *title = term->window_title != NULL ? term->window_title : "foot";
+    const char *title = term->window_title != NULL ? term->window_title : "ankle";
     char *copy = NULL;
 
     if (strlen(title) > max_len) {

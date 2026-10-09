@@ -78,13 +78,13 @@ print_usage(const char *prog_name)
 {
     static const char options[] =
         "\nOptions:\n"
-        "  -c,--config=PATH                         load configuration from PATH ($XDG_CONFIG_HOME/foot/foot.ini)\n"
+        "  -c,--config=PATH                         load configuration from PATH ($XDG_CONFIG_HOME/ankle/ankle.ini)\n"
         "  -C,--check-config                        verify configuration, exit with 0 if ok, otherwise exit with 1\n"
         "  -o,--override=[section.]key=value        override configuration option\n"
         "  -f,--font=FONT                           comma separated list of fonts in fontconfig format (monospace)\n"
         "  -t,--term=TERM                           value to set the environment variable TERM to (" FOOT_DEFAULT_TERM ")\n"
-        "  -T,--title=TITLE                         initial window title (foot)\n"
-        "  -a,--app-id=ID                           window application ID (foot)\n"
+        "  -T,--title=TITLE                         initial window title (ankle)\n"
+        "  -a,--app-id=ID                           window application ID (ankle)\n"
         "     --toplevel-tag=TAG                    set a custom toplevel tag\n"
         "  -m,--maximized                           start in maximized mode\n"
         "  -F,--fullscreen                          start in fullscreen mode\n"
@@ -93,8 +93,8 @@ print_usage(const char *prog_name)
         "  -D,--working-directory=DIR               directory to start in (CWD)\n"
         "  -w,--window-size-pixels=WIDTHxHEIGHT     initial width and height, in pixels\n"
         "  -W,--window-size-chars=WIDTHxHEIGHT      initial width and height, in characters\n"
-        "  -s,--server[=PATH]                       run as a server (use 'footclient' to start terminals).\n"
-        "                                           Without PATH, $XDG_RUNTIME_DIR/foot-$WAYLAND_DISPLAY.sock will be used.\n"
+        "  -s,--server[=PATH]                       run as a server (use 'ankleclient' to start terminals).\n"
+        "                                           Without PATH, $XDG_RUNTIME_DIR/ankle-$WAYLAND_DISPLAY.sock will be used.\n"
         "  -H,--hold                                remain open after child process exits\n"
         "  -p,--print-pid=FILE|FD                   print PID to file or FD (only applicable in server mode)\n"
         "  -d,--log-level={info|warning|error|none} log level (warning)\n"
@@ -420,7 +420,7 @@ main(int argc, char *const *argv)
             break;
 
         case 'v':
-            print_version_and_features("foot ");
+            print_version_and_features("ankle ");
             return EXIT_SUCCESS;
 
         case 'h':
@@ -649,7 +649,7 @@ main(int argc, char *const *argv)
         goto out;
 
     if (!as_server && (term = term_init(
-                           &conf, fdm, reaper, wayl, "foot", cwd, token, pty_path,
+                           &conf, fdm, reaper, wayl, "ankle", cwd, token, pty_path,
                            argc, argv, NULL,
                            &term_shutdown_cb, &shutdown_ctx)) == NULL) {
         goto out;
@@ -688,7 +688,7 @@ main(int argc, char *const *argv)
     }
 
     if (as_server)
-        LOG_INFO("running as server; launch terminals by running footclient");
+        LOG_INFO("running as server; launch terminals by running ankleclient");
 
     if (as_server && pid_file != NULL) {
         if (!print_pid(pid_file, &unlink_pid_file))

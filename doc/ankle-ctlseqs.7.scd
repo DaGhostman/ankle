@@ -1,11 +1,11 @@
-foot-ctlseqs(7)
+ankle-ctlseqs(7)
 
 # NAME
-foot-ctlseqs - terminal control sequences supported by foot
+ankle-ctlseqs - terminal control sequences supported by ankle
 
 # DESCRIPTION
 
-This document describes all the control sequences supported by foot.
+This document describes all the control sequences supported by ankle.
 
 - Control characters
 - Sequences beginning with ESC
@@ -25,7 +25,7 @@ This document describes all the control sequences supported by foot.
 :< *Description*
 |  \\a
 :  BEL
-:  Depends on what *bell* in *foot.ini*(5) is set to.
+:  Depends on what *bell* in *ankle.ini*(5) is set to.
 |  \\b
 :  BS
 :  Backspace; move the cursor left one step. Wrap if _bw_ is enabled.
@@ -176,29 +176,29 @@ m*.
 |  29
 :  Disable crossed-out
 |  30-37
-:  Select foreground color (using *regularN* in *foot.ini*(5))
+:  Select foreground color (using *regularN* in *ankle.ini*(5))
 |  38
 :  Select foreground color, see "indexed and RGB colors" below
 |  39
-:  Use the default foreground color (*foreground* in *foot.ini*(5))
+:  Use the default foreground color (*foreground* in *ankle.ini*(5))
 |  40-47
-:  Select background color (using *regularN* in *foot.ini*(5))
+:  Select background color (using *regularN* in *ankle.ini*(5))
 |  48
 :  Select background color, see "indexed and RGB colors" below
 |  49
-:  Use the default background color (*background* in *foot.ini*(5))
+:  Use the default background color (*background* in *ankle.ini*(5))
 |  58
 :  Select underline color, see "indexed and RGB colors" below
 |  59
 :  Use the default underline color
 |  90-97
-:  Select foreground color (using *brightN* in *foot.ini*(5))
+:  Select foreground color (using *brightN* in *ankle.ini*(5))
 |  100-107
-:  Select background color (using *brightN* in *foot.ini*(5))
+:  Select background color (using *brightN* in *ankle.ini*(5))
 
 ## Indexed and RGB colors (256-color palette and 24-bit colors)
 
-Foot supports both the new sub-parameter based variants, and the older
+Ankle supports both the new sub-parameter based variants, and the older
 parameter based variants for setting foreground and background colors.
 
 Indexed colors:
@@ -212,13 +212,13 @@ RGB colors:
 - *\\E[ 38 : 2 :* _r_ *:* _g_ *:* _b_ *m*
 - *\\E[ 38 ; 2 ;* _r_ *;* _g_ *;* _b_ *m*
 
-The first variant is the "correct" one (and foot also recognizes, but
+The first variant is the "correct" one (and ankle also recognizes, but
 ignores, the optional _tolerance_ parameters).
 
 The second one is allowed since many programs "forget" the color space
 ID, _cs_.
 
-The sub-parameter based variants are preferred, and are what foot's
+The sub-parameter based variants are preferred, and are what ankle's
 *terminfo*(5) entry uses.
 
 ## Private Modes
@@ -315,7 +315,7 @@ that corresponds to one of the following modes:
 :  Send ESC when Meta modifies a key (see xterm metaSendsEscape option)
 |  1042
 :  xterm
-:  Perform action for BEL character (see *bell* in *foot.ini*(5))
+:  Perform action for BEL character (see *bell* in *ankle.ini*(5))
 |  1047
 :  xterm
 :  Use alternate screen buffer
@@ -356,12 +356,12 @@ that corresponds to one of the following modes:
 :  foot
 :  Input Method Editor (IME) mode
 |  767371
-:  foot (fork)
-:  Ligatures (see *ligatures* in *foot.ini*(5))
+:  ankle
+:  Ligatures (see *ligatures* in *ankle.ini*(5))
 
 ## Window manipulation
 
-Foot implements a sub-set of XTerm's (originally dtterm's) window
+Ankle implements a sub-set of XTerm's (originally dtterm's) window
 manipulation sequences. The generic format is:
 
 *\\E[ *_Ps_* ; *_Ps_* ; *_Ps_* t*
@@ -371,22 +371,22 @@ manipulation sequences. The generic format is:
 :< *Description*
 |  11
 :  -
-:  Report if window is iconified. Foot always reports *1* - not iconified.
+:  Report if window is iconified. Ankle always reports *1* - not iconified.
 |  13
 :  -
-:  Report window position. Foot always reports (0,0), due to Wayland
+:  Report window position. Ankle always reports (0,0), due to Wayland
    limitations.
 |  13
 :  2
-:  Report text area position. Foot always reports (0,0) due to Wayland
+:  Report text area position. Ankle always reports (0,0) due to Wayland
    limitations.
 |  14
 :  -
-:  Report text area size, in pixels. Foot reports the grid size,
+:  Report text area size, in pixels. Ankle reports the grid size,
    excluding the margins.
 |  14
 :  2
-:  Report window size, in pixels. Foot reports the grid size plus the
+:  Report window size, in pixels. Ankle reports the grid size plus the
    margins.
 |  15
 :  -
@@ -431,7 +431,7 @@ manipulation sequences. The generic format is:
 |  \\E[ _Ps_ c
 :  DA
 :  VT100
-:  Send primary device attributes. Foot responds with "I'm a VT220 with
+:  Send primary device attributes. Ankle responds with "I'm a VT220 with
    sixel and ANSI color support".
 |  \\E[ _Ps_ A
 :  CUU
@@ -508,7 +508,7 @@ manipulation sequences. The generic format is:
 |  \\E[ > c
 :  DA2
 :  VT220
-:  Send secondary device attributes. Foot responds with "I'm a VT220
+:  Send secondary device attributes. Ankle responds with "I'm a VT220
    and here's my version number".
 |  \\E[ ! p
 :  DECSTR
@@ -565,11 +565,11 @@ manipulation sequences. The generic format is:
 |  \\E[ _Ps_ SP q
 :  DECSCUSR
 :  VT510
-:  Set cursor style. In foot, _Ps_=0 means "use style from foot.ini".
+:  Set cursor style. In ankle, _Ps_=0 means "use style from ankle.ini".
 |  \\E[ = _Ps_ c
 :  DA3
 :  VT510
-:  Send tertiary device attributes. Foot responds with "FOOT", in
+:  Send tertiary device attributes. Ankle responds with "FOOT", in
    hexadecimal.
 |  \\E[ _Pm_ d
 :  VPA
@@ -628,7 +628,7 @@ manipulation sequences. The generic format is:
 |  \\E[ > 4 ; _Pv_ m
 :  XTMODKEYS
 :  xterm
-:  Set level of the _modifyOtherKeys_ property to _Pv_. Note that foot
+:  Set level of the _modifyOtherKeys_ property to _Pv_. Note that ankle
    only supports level 1 and 2, where level 1 is the default setting.
 |  \\E[ ? _Pp_ m
 :  XTQMODKEYS
@@ -637,9 +637,9 @@ manipulation sequences. The generic format is:
 |  \\E[ > 4 n
 :  <unnamed>
 :  xterm
-:  Resets the _modifyOtherKeys_ property to level 1. Note that in foot,
+:  Resets the _modifyOtherKeys_ property to level 1. Note that in ankle,
    this sequence does not completely disable _modifyOtherKeys_, since
-   foot only supports level 1 and level 2 (and not level 0).
+   ankle only supports level 1 and level 2 (and not level 0).
 |  \\E[ ? u
 :  <unnamed>
 :  kitty
@@ -674,7 +674,7 @@ manipulation sequences. The generic format is:
 :  contour
 :  The current color theme mode (light or dark) is reported as *CSI ?
    997 ; 1|2 n*, where *1* means dark and *2* light. By convention, the
-   primary theme in foot is considered dark, and the alternative theme
+   primary theme in ankle is considered dark, and the alternative theme
    light.
 |  \\E[ ? 998 n
 :  Query terminal visibility
@@ -703,7 +703,7 @@ All _OSC_ sequences begin with *\\E]*, sometimes abbreviated _OSC_.
 |  \\E] 4 ; _c_ ; _spec_ \\E\\ 
 :  xterm
 :  Change color number _c_ to _spec_, where _spec_ is a color in
-   XParseColor format. foot only supports RGB colors; either
+   XParseColor format. ankle only supports RGB colors; either
    *rgb:<red>/<green>/<blue>*, or the legacy format (*#rgb*).
 |  \\E] 7 ; _Uri_ \\E\\ 
 :  iTerm2
@@ -717,7 +717,7 @@ All _OSC_ sequences begin with *\\E]*, sometimes abbreviated _OSC_.
    hyperlink. An empty URI closes the hyperlink.
 |  \\E] 9 ; _msg_ \\E\\ 
 :  iTerm2
-:  Desktop notification, uses *notify* in *foot.ini*(5).
+:  Desktop notification, uses *notify* in *ankle.ini*(5).
 |  \\E] 10 ; _spec_ \\E\\ 
 :  xterm
 :  Change the default foreground color to _spec_, a color in
@@ -725,7 +725,7 @@ All _OSC_ sequences begin with *\\E]*, sometimes abbreviated _OSC_.
 |  \\E] 11 ; _spec_ \\E\\ 
 :  xterm
 :  Change the default background color to _spec_, a color in
-   XParseColor format. Foot implements URxvt's transparency extension;
+   XParseColor format. Ankle implements URxvt's transparency extension;
    e.g. _spec_=*[75]#ff00ff* or _spec_=*rgba:ff/00/ff/bf* (pink with
    75% alpha).
 |  \\E] 12 ; _spec_ \\E\\ 
@@ -760,7 +760,7 @@ All _OSC_ sequences begin with *\\E]*, sometimes abbreviated _OSC_.
 |  \\E] 99 ; _params_ ; _payload_ \\E\\ 
 :  kitty
 :  Desktop notification; uses *desktop-notifications.command* in
-   *foot.ini*(5).
+   *ankle.ini*(5).
 |  \\E] 104 ; _c_ \\E\\ 
 :  xterm
 :  Reset color number _c_ (multiple semicolon separated _c_ values may
@@ -801,7 +801,7 @@ All _OSC_ sequences begin with *\\E]*, sometimes abbreviated _OSC_.
 |  \\E] 777;notify;_title_;_msg_ \\E\\ 
 :  urxvt
 :  Desktop notification, uses *desktop-notifications.command* in
-   *foot.ini*(5).
+   *ankle.ini*(5).
 
 # DCS
 
@@ -825,4 +825,4 @@ and are terminated by *\\E\\* (ST).
 
 # FOOTNOTE
 
-Foot does not support 8-bit control characters ("C1").
+Ankle does not support 8-bit control characters ("C1").

@@ -1,4 +1,4 @@
-project('foot', 'c',
+project('ankle', 'c',
         version: '1.28.0',
         license: 'MIT',
         meson_version: '>=0.63.0',
@@ -320,7 +320,7 @@ if get_option('b_pgo') == 'generate'
 endif
 
 executable(
-  'foot',
+  'ankle',
   'async.c', 'async.h',
   'box-drawing.c', 'box-drawing.h',
   'config.c', 'config.h',
@@ -355,7 +355,7 @@ executable(
   install: true)
 
 executable(
-  'footclient',
+  'ankleclient',
   'client.c', 'client-protocol.h',
   'foot-features.c', 'foot-features.h',
   'macros.h',
@@ -366,7 +366,7 @@ executable(
   install: true)
 
 install_data(
-  'foot.desktop', 'foot-server.desktop', 'footclient.desktop',
+  'ankle.desktop', 'ankle-server.desktop', 'ankleclient.desktop',
   install_dir: join_paths(get_option('datadir'), 'applications'))
 
 systemd = dependency('systemd', required: false)
@@ -384,27 +384,27 @@ if systemd.found() or custom_systemd_units_dir != ''
 
   configure_file(
     configuration: configuration,
-    input: 'foot-server.service.in',
+    input: 'ankle-server.service.in',
     output: '@BASENAME@',
     install_dir: systemd_units_dir
     )
 
   install_data(
-    'foot-server.socket',
+    'ankle-server.socket',
     install_dir: systemd_units_dir)
 endif
 
 scdoc = dependency('scdoc', native: true, required: get_option('docs'))
-install_data('foot.ini', install_dir: join_paths(get_option('sysconfdir'), 'xdg', 'foot'))
+install_data('ankle.ini', install_dir: join_paths(get_option('sysconfdir'), 'xdg', 'ankle'))
 if scdoc.found()
   install_data(
     'LICENSE', 'README.md', 'CHANGELOG.md',
-    install_dir: join_paths(get_option('datadir'), 'doc', 'foot'))
+    install_dir: join_paths(get_option('datadir'), 'doc', 'ankle'))
   subdir('doc')
 endif
 
 if get_option('themes')
-  install_subdir('themes', install_dir: join_paths(get_option('datadir'), 'foot'))
+  install_subdir('themes', install_dir: join_paths(get_option('datadir'), 'ankle'))
 endif
 
 terminfo_base_name = get_option('terminfo-base-name')

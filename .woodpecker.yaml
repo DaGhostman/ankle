@@ -57,8 +57,8 @@ steps:
       - meson setup --buildtype=debug -Dgrapheme-clustering=enabled -Dfcft:grapheme-shaping=enabled -Dfcft:run-shaping=enabled -Dfcft:test-text-shaping=true ../..
       - ninja -v -k0
       - ninja -v test
-      - ./foot --version
-      - ./footclient --version
+      - ./ankle --version
+      - ./ankleclient --version
       - cd ../..
 
       # Release (gcc)
@@ -67,8 +67,8 @@ steps:
       - meson setup --buildtype=release -Db_pgo=generate -Dgrapheme-clustering=enabled -Dfcft:grapheme-shaping=enabled -Dfcft:run-shaping=enabled  -Dfcft:test-text-shaping=true ../..
       - ninja -v -k0
       - ninja -v test
-      - ./foot --version
-      - ./footclient --version
+      - ./ankle --version
+      - ./ankleclient --version
       - cd ../..
 
       # Release (clang)
@@ -77,8 +77,8 @@ steps:
       - CC=clang meson setup --buildtype=release -Dgrapheme-clustering=enabled -Dfcft:grapheme-shaping=enabled -Dfcft:run-shaping=enabled  -Dfcft:test-text-shaping=true ../..
       - ninja -v -k0
       - ninja -v test
-      - ./foot --version
-      - ./footclient --version
+      - ./ankle --version
+      - ./ankleclient --version
       - cd ../..
 
       # no grapheme clustering
@@ -88,8 +88,8 @@ steps:
       - meson setup --buildtype=debug -Dgrapheme-clustering=disabled -Dfcft:grapheme-shaping=disabled -Dfcft:run-shaping=disabled -Dfcft:test-text-shaping=false ../..
       - ninja -v -k0
       - ninja -v test
-      - ./foot --version
-      - ./footclient --version
+      - ./ankle --version
+      - ./ankleclient --version
       - cd ../..
 
   - name: x86
@@ -114,8 +114,8 @@ steps:
       - meson setup --buildtype=debug -Dgrapheme-clustering=enabled -Dfcft:grapheme-shaping=enabled -Dfcft:run-shaping=enabled -Dfcft:test-text-shaping=true ../..
       - ninja -v -k0
       - ninja -v test
-      - ./foot --version
-      - ./footclient --version
+      - ./ankle --version
+      - ./ankleclient --version
       - cd ../..
 
       # Release (gcc)
@@ -124,8 +124,8 @@ steps:
       - meson setup --buildtype=release -Db_pgo=generate -Dgrapheme-clustering=enabled -Dfcft:grapheme-shaping=enabled -Dfcft:run-shaping=enabled -Dfcft:test-text-shaping=true ../..
       - ninja -v -k0
       - ninja -v test
-      - ./foot --version
-      - ./footclient --version
+      - ./ankle --version
+      - ./ankleclient --version
       - cd ../..
 
       # Release (clang)
@@ -134,6 +134,6 @@ steps:
       - CC=clang meson setup --buildtype=release -Dgrapheme-clustering=enabled -Dfcft:grapheme-shaping=enabled -Dfcft:run-shaping=enabled -Dfcft:test-text-shaping=true ../..
       - ninja -v -k0
       - ninja -v test
-      - ./foot --version
-      - ./footclient --version
+      - ./ankle --version
+      - ./ankleclient --version
       - cd ../..

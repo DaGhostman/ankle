@@ -390,7 +390,7 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
 
     instance->terminal = term_init(
         conf != NULL ? conf : server->conf,
-        server->fdm, server->reaper, server->wayl, "footclient", cwd, token,
+        server->fdm, server->reaper, server->wayl, "ankleclient", cwd, token,
         NULL, cdata.argc, argv, (const char *const *)envp,
         &term_shutdown_handler, instance);
 
@@ -584,7 +584,7 @@ server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
             break;
 
         case CONNECT_SUCCESS:
-            LOG_ERR("%s is already accepting connections; is 'foot --server' already running", sock_path);
+            LOG_ERR("%s is already accepting connections; is 'ankle --server' already running", sock_path);
             /* FALLTHROUGH */
 
         case CONNECT_ERR:

@@ -1,34 +1,34 @@
-foot(1)
+ankle(1)
 
 # NAME
 
-foot - Wayland terminal emulator
+ankle - Wayland terminal emulator
 
 # SYNOPSIS
 
-*foot* [_OPTIONS_]++
-*foot* [_OPTIONS_] <_command_> [_COMMAND OPTIONS_]
+*ankle* [_OPTIONS_]++
+*ankle* [_OPTIONS_] <_command_> [_COMMAND OPTIONS_]
 
 All trailing (non-option) arguments are treated as a command, and its
 arguments, to execute (instead of the default shell).
 
 # DESCRIPTION
 
-*foot* is a Wayland terminal emulator. Running it without arguments
+*ankle* is a Wayland terminal emulator. Running it without arguments
 will start a new terminal window with your default shell.
 
 You can override the default shell by appending a custom command to
-the foot command line
+the ankle command line
 
-	*foot htop*
+	*ankle htop*
 
 # OPTIONS
 
 *-c*,*--config*=_PATH_
-	Path to configuration file, see *foot.ini*(5) for details.
+	Path to configuration file, see *ankle.ini*(5) for details.
 
 	The configuration file is automatically passed to new terminals
-	spawned via *spawn-terminal* (see *foot.ini*(5)).
+	spawned via *spawn-terminal* (see *ankle.ini*(5)).
 
 *-C*,*--check-config*
 	Verify configuration and then exit with 0 if ok, otherwise exit
@@ -64,11 +64,11 @@ the foot command line
 	and *ENVIRONMENT*). Default: _@default_terminfo@_.
 
 *-T*,*--title*=_TITLE_
-	Initial window title. Default: _foot_.
+	Initial window title. Default: _ankle_.
 
 *-a*,*--app-id*=_ID_
 	Value to set the *app-id* property on the Wayland window
-	to. Default: _foot_ (normal mode), or _footclient_ (server mode).
+	to. Default: _ankle_ (normal mode), or _ankleclient_ (server mode).
 
 *--class*=_ID_
 	Alias for *--app-id*.
@@ -98,11 +98,11 @@ the foot command line
 
 *-D*,*--working-directory*=_DIR_
 	Initial working directory for the client application. Default:
-	_CWD of foot_.
+	_CWD of ankle_.
 
 *-s*,*--server*[=_PATH_|_FD_]
-	Run as a server. In this mode, a single foot instance hosts
-	multiple terminals (windows). Use *footclient*(1) to launch new
+	Run as a server. In this mode, a single ankle instance hosts
+	multiple terminals (windows). Use *ankleclient*(1) to launch new
 	terminals.
 	
 	This saves some memory since for example fonts and glyph caches
@@ -123,27 +123,27 @@ the foot command line
 	others with it.
 	
 	The default path is
-	*$XDG\_RUNTIME\_DIR/foot-$WAYLAND\_DISPLAY.sock*.
+	*$XDG\_RUNTIME\_DIR/ankle-$WAYLAND\_DISPLAY.sock*.
 	
 	If *$XDG\_RUNTIME\_DIR* is not set, the default path is instead
-	*/tmp/foot.sock*.
+	*/tmp/ankle.sock*.
 	
 	If *$XDG\_RUNTIME\_DIR* is set, but *$WAYLAND\_DISPLAY* is not,
-	the default path is *$XDG\_RUNTIME\_DIR/foot.sock*.
+	the default path is *$XDG\_RUNTIME\_DIR/ankle.sock*.
 	
 	Note that if you change the default, you will also need to use the
-	*--server-socket* option in *footclient*(1) and point it to your
+	*--server-socket* option in *ankleclient*(1) and point it to your
 	custom socket path.
 
-	If the argument is a number, foot will interpret it as the file descriptor
+	If the argument is a number, ankle will interpret it as the file descriptor
 	of a socket provided by a supervision daemon (such as systemd or s6), and
 	use that socket as it's own.
 
-	Two systemd units (foot-server.{service,socket}) are provided to use that
+	Two systemd units (ankle-server.{service,socket}) are provided to use that
 	feature with systemd. To use socket activation, only enable the
 	socket unit.
 
-	Note that starting *foot --server* as a systemd service will use
+	Note that starting *ankle --server* as a systemd service will use
 	the environment of the systemd user instance; thus, you'll need
 	to import *$WAYLAND_DISPLAY* in it using *systemctl --user
 	import-environment WAYLAND_DISPLAY*.
@@ -179,15 +179,15 @@ the foot command line
 	This option was added in response to several program launchers
 	passing *-e* to arbitrary terminals, under the assumption that
 	they all implement the same semantics for it as *xterm*(1).
-	Ignoring it allows foot to be invoked as e.g. *foot -e man foot*
+	Ignoring it allows ankle to be invoked as e.g. *ankle -e man ankle*
 	with the same results as with xterm, instead of producing an
 	"invalid option" error.
 
 # KEYBOARD SHORTCUTS
 
 The following keyboard shortcuts are available by default. They can be
-changed in *foot.ini*(5). There are also more actions (disabled by
-default) available; see *foot.ini*(5).
+changed in *ankle.ini*(5). There are also more actions (disabled by
+default) available; see *ankle.ini*(5).
 
 ## NORMAL MODE
 
@@ -395,9 +395,9 @@ _Examples_:
 
 # URLs
 
-Foot supports URL detection. But, unlike many other terminal
+Ankle supports URL detection. But, unlike many other terminal
 emulators, where URLs are highlighted when they are hovered and opened
-by clicking on them, foot uses a keyboard driven approach.
+by clicking on them, ankle uses a keyboard driven approach.
 
 Pressing *ctrl*+*shift*+*o* enters _"Open URL mode"_, where all currently
 visible URLs are underlined, and is associated with a
@@ -405,8 +405,8 @@ _"jump-label"_. The jump-label indicates the _key sequence_
 (e.g. *"AF"*) to use to activate the URL.
 
 The key binding can, of course, be customized, like all other key
-bindings in foot. See *show-urls-launch* and *show-urls-copy* in
-*foot.ini*(5).
+bindings in ankle. See *show-urls-launch* and *show-urls-copy* in
+*ankle.ini*(5).
 
 *show-urls-launch* by default opens the URL with *xdg-open*. This can
 be changed with the *url-launch* option.
@@ -420,13 +420,13 @@ the jump label key sequences can be configured.
 
 # ALT/META CHARACTERS
 
-By default, foot prefixes meta characters with *ESC*. This corresponds
+By default, ankle prefixes meta characters with *ESC*. This corresponds
 to XTerm's *metaSendsEscape* option set to *true*.
 
 This can be disabled programmatically with *\E[?1036l* (and enabled
 again with *\E[?1036h*).
 
-When disabled, foot will instead set the 8:th bit of meta character
+When disabled, ankle will instead set the 8:th bit of meta character
 and then UTF-8 encode it. This corresponds to XTerm's *eightBitMeta*
 option set to *true*.
 
@@ -436,12 +436,12 @@ This can also be disabled programmatically with *rmm* (Reset Meta Mode,
 
 # BACKSPACE
 
-Foot transmits DEL (*^?*) on backspace. This corresponds to XTerm's
+Ankle transmits DEL (*^?*) on backspace. This corresponds to XTerm's
 *backarrowKey* option set to *false*, and to DECBKM being _reset_.
 
 To instead transmit BS (*^H*), press *ctrl*+*backspace*.
 
-Note that foot does *not* implement DECBKM, and that the behavior
+Note that ankle does *not* implement DECBKM, and that the behavior
 described above *cannot* be changed.
 
 Finally, pressing *alt* will prefix the transmitted byte with ESC.
@@ -465,24 +465,33 @@ numbers, when in _application_ mode.
 
 # CONFIGURATION
 
-foot will search for a configuration file in the following locations,
+ankle will search for a configuration file in the following locations,
 in this order:
 
+	- *XDG_CONFIG_HOME/ankle/ankle.ini* (defaulting to
+	  *$HOME/.config/ankle/ankle.ini* if unset)
 	- *XDG_CONFIG_HOME/foot/foot.ini* (defaulting to
 	  *$HOME/.config/foot/foot.ini* if unset)
+	- *XDG_CONFIG_DIRS/ankle/ankle.ini* (defaulting to
+	  */etc/xdg/ankle/ankle.ini* if unset)
 	- *XDG_CONFIG_DIRS/foot/foot.ini* (defaulting to
 	  */etc/xdg/foot/foot.ini* if unset)
 
-An example configuration file containing all options with their default value
-commented out will usually be installed to */etc/xdg/foot/foot.ini*.
+foot's configuration files are only used as a fallback, making it easy
+to switch from foot. ankle-specific options (e.g. *ligatures*) should
+go in *ankle.ini*, since foot will warn about options it does not
+recognize.
 
-For more information, see *foot.ini*(5).
+An example configuration file containing all options with their default value
+commented out will usually be installed to */etc/xdg/ankle/ankle.ini*.
+
+For more information, see *ankle.ini*(5).
 
 # SHELL INTEGRATION
 
 ## Current working directory
 
-New foot terminal instances (bound to *ctrl*+*shift*+*n* by default)
+New ankle terminal instances (bound to *ctrl*+*shift*+*n* by default)
 will open in the current working directory, if the shell in the
 "parent" terminal reports directory changes.
 
@@ -494,7 +503,7 @@ for details.
 
 ## Jumping between prompts
 
-Foot can move the current viewport to focus prompts of already
+Ankle can move the current viewport to focus prompts of already
 executed commands (bound to *ctrl*+*shift*+*z*/*x* by default).
 
 For this to work, the shell needs to emit an OSC-133;A
@@ -517,12 +526,12 @@ output to an application of your choice (similar to the other
 *pipe-\** key bindings):
 
 	*\[key-bindings\]++
-pipe-command-output=[sh -c "f=$(mktemp); cat - > $f; footclient emacsclient -nw $f; rm $f"] Control+Shift+g*
+pipe-command-output=[sh -c "f=$(mktemp); cat - > $f; ankleclient emacsclient -nw $f; rm $f"] Control+Shift+g*
 
 When pressing *ctrl*+*shift*+*g*, the last command's output is written
 to a temporary file, then an emacsclient is started in a new
-footclient instance. The temporary file is removed after the
-footclient instance has closed.
+ankleclient instance. The temporary file is removed after the
+ankleclient instance has closed.
 
 For this to work, the shell must emit an OSC-133;C (*\\E]133;C\\E\\\\*)
 sequence before command output starts, and an OSC-133;D
@@ -545,11 +554,11 @@ for details, and examples for other shells
 # TERMINFO
 
 Client applications use the terminfo identifier specified by the
-environment variable *TERM* (set by foot) to determine terminal
+environment variable *TERM* (set by ankle) to determine terminal
 capabilities.
 
-Foot has two terminfo definitions: *foot* and *foot-direct*, with
-*foot* being the default.
+Ankle uses foot's two terminfo definitions: *foot* and *foot-direct*, with
+*ankle* being the default.
 
 The difference between the two is in the number of colors they
 describe; *foot* describes 256 colors and *foot-direct* 16.7 million
@@ -557,7 +566,7 @@ colors (24-bit truecolor).
 
 Note that using the *foot* terminfo does not limit the number of
 usable colors to 256; applications can still use 24-bit RGB colors. In
-fact, most applications work best with *foot* (including 24-bit
+fact, most applications work best with *ankle* (including 24-bit
 colors). Using *\*-direct* terminfo entries has been known to crash
 some ncurses applications even.
 
@@ -596,11 +605,11 @@ XTerm's implementation (as of XTerm-370) only supports querying key
 Kitty has extended this, and also supports querying all integer and
 string capabilities.
 
-Foot supports this, and extends it even further, to also include
+Ankle supports this, and extends it even further, to also include
 boolean capabilities. This means foot's entire terminfo can be queried
 via *XTGETTCAP*.
 
-Note that both Kitty and foot handles responses to multi-capability
+Note that both Kitty and ankle handles responses to multi-capability
 queries slightly differently, compared to XTerm.
 
 XTerm will send a single DCS reply, with ;-separated
@@ -616,37 +625,37 @@ In other words, if you send a large multi-capability query, you will
 only get responses up to, but not including, the first invalid
 capability. All subsequent capabilities will be dropped.
 
-Kitty and foot on the other hand, send one DCS response for each
+Kitty and ankle on the other hand, send one DCS response for each
 capability in the multi query. This allows us to send a proper
 success/fail flag for each queried capability. Responses for all
 queried capabilities are always sent. No queries are ever dropped.
 
 # EXIT STATUS
 
-Foot will exit with code 230 if there is a failure in foot itself.
+Ankle will exit with code 230 if there is a failure in ankle itself.
 
 In all other cases, the exit code is that of the client application
 (i.e. the shell).
 
 # ENVIRONMENT
 
-## Variables used by foot
+## Variables used by ankle
 
 *SHELL*
 	The default child process to run, when no _command_ argument is
-	specified and the *shell* option in *foot.ini*(5) is not set.
+	specified and the *shell* option in *ankle.ini*(5) is not set.
 
 *HOME*
 	Used to determine the location of the configuration file, see
-	*foot.ini*(5) for details.
+	*ankle.ini*(5) for details.
 
 *XDG\_CONFIG\_HOME*
 	Used to determine the location of the configuration file, see
-	*foot.ini*(5) for details.
+	*ankle.ini*(5) for details.
 
 *XDG\_CONFIG\_DIRS*
 	Used to determine the location of the configuration file, see
-	*foot.ini*(5) for details.
+	*ankle.ini*(5) for details.
 
 *XDG\_RUNTIME\_DIR*
 	Used to construct the default _PATH_ for the *--server*
@@ -670,21 +679,21 @@ In all other cases, the exit code is that of the client application
 	terminfo/termcap identifier. This is used by client applications
 	to determine which capabilities a terminal supports. The value is
 	set according to either the *--term* command-line option or the
-	*term* config option in *foot.ini*(5).
+	*term* config option in *ankle.ini*(5).
 
 *COLORTERM*
 	This variable is set to *truecolor*, to indicate to client
 	applications that 24-bit RGB colors are supported.
 
 *PWD*
-	Current working directory (at the time of launching foot)
+	Current working directory (at the time of launching ankle)
 
 *SHELL*
 	Set to the launched shell, if the shell is valid (it is listed in
 	*/etc/shells*).
 
 In addition to the variables listed above, custom environment
-variables may be defined in *foot.ini*(5).
+variables may be defined in *ankle.ini*(5).
 
 ## Variables *unset* in the child process
 
@@ -692,29 +701,30 @@ variables may be defined in *foot.ini*(5).
 *TERM_PROGRAM_VERSION*
 	These environment variables are set by certain other terminal
 	emulators. We unset them, to prevent applications from
-	misdetecting foot.
+	misdetecting ankle.
 
 In addition to the variables listed above, custom environment
-variables to unset may be defined in *foot.ini*(5).
+variables to unset may be defined in *ankle.ini*(5).
 
 # Signals
 
-The following signals have special meaning in foot:
+The following signals have special meaning in ankle:
 
 - SIGUSR1: switch to the dark color theme (*[colors-dark]*).
 - SIGUSR2: switch to the light color theme (*[colors-light]*).
 
-Note: you can send SIGUSR1/SIGUSR2 to a *foot --server* process too,
+Note: you can send SIGUSR1/SIGUSR2 to a *ankle --server* process too,
 in which case all client instances will switch theme. Furthermore, all
 future client instances will also use the selected theme.
 
-You can also send SIGUSR1/SIGUSR2 to a footclient instance, see
-*footclient*(1) for details.
+You can also send SIGUSR1/SIGUSR2 to a ankleclient instance, see
+*ankleclient*(1) for details.
 
 
 # BUGS
 
-Please report bugs to https://codeberg.org/dnkl/foot/issues
+ankle is a fork of ankle (https://codeberg.org/dnkl/ankle). Please do
+not report bugs in ankle to the ankle project.
 
 Before you open a new issue, please search existing bug reports, both
 open and closed ones. Chances are someone else has already reported
@@ -722,8 +732,8 @@ the same issue.
 
 The report should contain the following:
 
-- Foot version (*foot --version*).
-- Log output from foot (run *foot -d info* from another terminal).
+- Ankle version (*ankle --version*).
+- Log output from ankle (run *ankle -d info* from another terminal).
 - Which Wayland compositor (and version) you are running.
 - If reporting a crash, please try to provide a *bt full* backtrace
   with symbols.
@@ -731,8 +741,8 @@ The report should contain the following:
 
 # IRC
 
-\#foot on irc.libera.chat
+\#ankle on irc.libera.chat
 
 # SEE ALSO
 
-*foot.ini*(5), *footclient*(1)
+*ankle.ini*(5), *ankleclient*(1)
