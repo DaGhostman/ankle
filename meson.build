@@ -1,7 +1,7 @@
 project('foot', 'c',
         version: '1.28.0',
         license: 'MIT',
-        meson_version: '>=0.59.0',
+        meson_version: '>=0.63.0',
         default_options: [
           'c_std=c11',
           'warning_level=1',
@@ -164,7 +164,11 @@ if pixman.version().version_compare('>=0.46.0')
 endif
 
 tllist = dependency('tllist', version: '>=1.1.0', fallback: 'tllist')
-fcft = dependency('fcft', version: ['>=3.3.1', '<4.0.0'], fallback: 'fcft')
+# Always use the bundled fcft, since it carries patches (see
+# subprojects/packagefiles/fcft). As a subproject, fcft is linked
+# statically, and nothing is installed.
+subproject('fcft', default_options: ['examples=false'])
+fcft = dependency('fcft', version: ['>=3.3.1', '<4.0.0'])
 
 wayland_protocols_datadir = wayland_protocols.get_variable('pkgdatadir')
 

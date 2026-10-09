@@ -8,9 +8,12 @@
 /*
  * Cache of shaped text runs, used when rendering ligatures.
  *
- * fcft does not cache text-runs (every call re-shapes, and
- * re-rasterizes all glyphs), so we keep the results around, keyed on
- * font, subpixel mode and the run's text.
+ * fcft does not cache text-runs (every call re-shapes the text), so
+ * we keep the results around, keyed on font, subpixel mode and the
+ * run's text.
+ *
+ * Note that the bundled (patched) fcft owns the glyph images of
+ * text-runs; the cache must be flushed before fonts are destroyed.
  *
  * Lookups are thread safe, and may be done concurrently from the
  * render worker threads. Runs returned by lookups stay valid until

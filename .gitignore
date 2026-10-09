@@ -2,4 +2,5 @@
 /pkg/
 /src/
 /subprojects/*/
+!/subprojects/packagefiles/
 /subprojects/.wraplock

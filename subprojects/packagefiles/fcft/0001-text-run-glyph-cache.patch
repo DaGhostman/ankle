@@ -1,0 +1,196 @@
+diff --git a/fcft.c b/fcft.c
+index d1a5147..4cd4ba6 100644
+--- a/fcft.c
++++ b/fcft.c
+@@ -158,6 +158,14 @@ struct font_priv {
+ 
+     tll(struct fallback) fallbacks;
+ 
++#if defined(FCFT_HAVE_HARFBUZZ) && defined(FCFT_HAVE_UTF8PROC)
++    /*
++     * Glyphs rasterized by text-runs, keyed on font instance and
++     * glyph index (not codepoint). Protected by 'lock'.
++     */
++    struct run_glyph **run_glyph_cache;
++#endif
++
+     struct fcft_font_options options;
+     size_t ref_counter;
+ };
+@@ -2579,12 +2587,98 @@ struct text_run {
+     size_t size;
+ };
+ 
++/* Must be a power of two */
++#define RUN_GLYPH_CACHE_SIZE 1024
++
++struct run_glyph {
++    struct run_glyph *next;
++    const struct instance *inst;
++    uint32_t index;
++    enum fcft_subpixel subpixel;
++    struct glyph_priv *glyph;  /* NULL if rasterization failed */
++};
++
++/*
++ * Returns the (cached) glyph for glyph index 'index' in 'inst'. Must
++ * be called with font->lock held.
++ */
++static const struct glyph_priv *
++run_glyph_cache_get(struct font_priv *font, const struct instance *inst,
++                    uint32_t index, enum fcft_subpixel subpixel)
++{
++    if (font->run_glyph_cache == NULL) {
++        font->run_glyph_cache = calloc(
++            RUN_GLYPH_CACHE_SIZE, sizeof(font->run_glyph_cache[0]));
++        if (font->run_glyph_cache == NULL)
++            return NULL;
++    }
++
++    size_t idx = hash_index_for_size(
++        RUN_GLYPH_CACHE_SIZE,
++        ((uintptr_t)inst >> 4) ^ (size_t)subpixel << 29 ^ index);
++
++    for (const struct run_glyph *e = font->run_glyph_cache[idx];
++         e != NULL;
++         e = e->next)
++    {
++        if (e->inst == inst && e->index == index && e->subpixel == subpixel)
++            return e->glyph;
++    }
++
++    struct glyph_priv *glyph = malloc(sizeof(*glyph));
++    if (glyph == NULL)
++        return NULL;
++
++    if (!glyph_for_index(inst, index, subpixel, &font->options, glyph)) {
++        free(glyph);
++        glyph = NULL;
++    }
++
++    struct run_glyph *e = malloc(sizeof(*e));
++    if (e == NULL) {
++        if (glyph != NULL)
++            glyph_destroy_private(glyph);
++        return NULL;
++    }
++
++    *e = (struct run_glyph){
++        .next = font->run_glyph_cache[idx],
++        .inst = inst,
++        .index = index,
++        .subpixel = subpixel,
++        .glyph = glyph,
++    };
++    font->run_glyph_cache[idx] = e;
++    return glyph;
++}
++
++static void
++run_glyph_cache_destroy(struct font_priv *font)
++{
++    if (font->run_glyph_cache == NULL)
++        return;
++
++    for (size_t i = 0; i < RUN_GLYPH_CACHE_SIZE; i++) {
++        struct run_glyph *e = font->run_glyph_cache[i];
++        while (e != NULL) {
++            struct run_glyph *next = e->next;
++            if (e->glyph != NULL)
++                glyph_destroy_private(e->glyph);
++            free(e);
++            e = next;
++        }
++    }
++
++    free(font->run_glyph_cache);
++    font->run_glyph_cache = NULL;
++}
++
+ static bool
+-rasterize_partial_run(struct text_run *run, const struct instance *inst,
++rasterize_partial_run(struct text_run *run, struct font_priv *font,
++                      const struct instance *inst,
+                       const uint32_t *text, size_t len,
+                       size_t run_start, size_t run_len,
+-                      enum fcft_subpixel subpixel,
+-                      const struct fcft_font_options *options)
++                      enum fcft_subpixel subpixel)
+ {
+     hb_buffer_add_utf32(inst->hb_buf, text, len, run_start, run_len);
+     hb_buffer_guess_segment_properties(inst->hb_buf);
+@@ -2614,22 +2708,30 @@ rasterize_partial_run(struct text_run *run, const struct instance *inst,
+ 
+         LOG_DBG("#%u: codepoint=%04x, cluster=%d", i, info->codepoint, info->cluster);
+ 
++        const struct glyph_priv *cached = run_glyph_cache_get(
++            font, inst, info->codepoint, subpixel);
++
++        if (cached == NULL)
++            continue;
++
+         struct glyph_priv *glyph = malloc(sizeof(*glyph));
+         if (glyph == NULL)
+             return false;
+ 
+-        if (!glyph_for_index(inst, info->codepoint, subpixel, options, glyph)) {
+-            free(glyph);
+-            continue;
+-        }
++        /*
++         * Shallow copy, borrowing the cached glyph's image. Marking
++         * it as invalid prevents glyph_destroy() from freeing the
++         * image. The run-specific position is set below.
++         */
++        *glyph = *cached;
++        glyph->valid = false;
+ 
+         assert(info->cluster < len);
+         glyph->public.cp = text[info->cluster];
+         glyph->public.cols = cpwidth(glyph->public.cp);
+ 
+-        /* TODO: can’t reference font data, since the font may be
+-         * free:d before the text-run (and thus all the text-run’s
+-         * glyphs) */
++        /* The glyph image is owned by the font, but the font name
++         * is per-instance; don't expose it */
+         glyph->public.font_name = NULL;
+         glyph->public.x += pos->x_offset / 64. * inst->pixel_size_fixup;
+         glyph->public.y += pos->y_offset / 64. * inst->pixel_size_fixup;
+@@ -2801,8 +2903,8 @@ fcft_rasterize_text_run_utf32(
+         const struct partial_run *prun = &it->item;
+ 
+         bool ret = rasterize_partial_run(
+-            &run, prun->inst, (const uint32_t *)text, len,
+-            prun->start, prun->len, subpixel, &font->options);
++            &run, font, prun->inst, (const uint32_t *)text, len,
++            prun->start, prun->len, subpixel);
+ 
+         hb_buffer_clear_contents(prun->inst->hb_buf);
+         if (!ret)
+@@ -2937,6 +3039,10 @@ fcft_destroy(struct fcft_font *_font)
+     tll_free(font->fallbacks);
+     mtx_destroy(&font->lock);
+ 
++#if defined(FCFT_HAVE_HARFBUZZ) && defined(FCFT_HAVE_UTF8PROC)
++    run_glyph_cache_destroy(font);
++#endif
++
+     for (size_t i = 0;
+          i < font->glyph_cache.size && font->glyph_cache.table != NULL;
+          i++)
+diff --git a/fcft/fcft.h b/fcft/fcft.h
+index 47d1f74..c8140f1 100644
+--- a/fcft/fcft.h
++++ b/fcft/fcft.h
+@@ -142,6 +142,10 @@ struct fcft_text_run {
+     size_t count;
+ };
+ 
++/*
++ * Note: the text-run's glyph images are owned by 'font'; the text-run
++ * must be destroyed before the font is.
++ */
+ struct fcft_text_run *fcft_rasterize_text_run_utf32(
+     struct fcft_font *font, size_t len, const uint32_t text[static len],
+     enum fcft_subpixel subpixel);

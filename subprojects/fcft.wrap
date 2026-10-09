@@ -1,3 +1,9 @@
 [wrap-git]
 url = https://codeberg.org/dnkl/fcft.git
-revision = master
+# Pinned, since the patches below are made against this revision
+revision = 1ff7e79dabb22514fc27dcf1b61124c1e7bb7c62
+depth = 1
+
+# Text-run glyphs are cached by glyph index, instead of being
+# re-rasterized on every call (needed for ligature performance)
+diff_files = fcft/0001-text-run-glyph-cache.patch
