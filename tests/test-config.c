@@ -531,6 +531,7 @@ test_section_main(void)
 
     test_boolean(&ctx, &parse_section_main, "login-shell", &conf.login_shell);
     test_boolean(&ctx, &parse_section_main, "box-drawings-uses-font-glyphs", &conf.box_drawings_uses_font_glyphs);
+    test_boolean(&ctx, &parse_section_main, "opaque-fullscreen", &conf.opaque_fullscreen);
     test_boolean(&ctx, &parse_section_main, "ligatures", &conf.ligatures.enabled);
     {
         ctx.key = "ligatures";

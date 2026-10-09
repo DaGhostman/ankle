@@ -776,7 +776,7 @@ cell_colors(const struct terminal *term, const struct cell *cell)
             _bg = swap;
         }
 
-        else if (!term->window->is_fullscreen && term->colors.alpha != 0xffff) {
+        else if (!wayl_win_is_forced_opaque(term->window) && term->colors.alpha != 0xffff) {
             switch (term->conf->colors_dark.alpha_mode) {
             case ALPHA_MODE_DEFAULT: {
                 if (cell->attrs.bg_src == COLOR_DEFAULT) {
@@ -805,7 +805,8 @@ cell_colors(const struct terminal *term, const struct cell *cell)
             }
         } else {
             /*
-             * Note: disable transparency when fullscreened.
+             * Note: disable transparency when fullscreened (only if
+             * opaque-fullscreen=yes; ankle keeps it by default).
              *
              * This is because the wayland protocol mandates no screen
              * content is shown behind the fullscreened window.
@@ -1583,8 +1584,8 @@ render_margin(struct terminal *term, struct buffer *buf,
     const uint32_t _bg = !term->reverse ? term->colors.bg : term->colors.fg;
     uint16_t alpha = term->colors.alpha;
 
-    if (term->window->is_fullscreen) {
-        /* Disable alpha in fullscreen - see render_cell() for details */
+    if (wayl_win_is_forced_opaque(term->window)) {
+        /* Disable alpha in fullscreen - see cell_colors() for details */
         alpha = 0xffff;
     }
 

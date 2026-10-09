@@ -1265,6 +1265,9 @@ parse_section_main(struct context *ctx)
     else if (streq(key, "box-drawings-uses-font-glyphs"))
         return value_to_bool(ctx, &conf->box_drawings_uses_font_glyphs);
 
+    else if (streq(key, "opaque-fullscreen"))
+        return value_to_bool(ctx, &conf->opaque_fullscreen);
+
     else if (streq(key, "ligatures")) {
         if (streq(value, "except-cursor")) {
             conf->ligatures.enabled = true;
@@ -3672,6 +3675,7 @@ config_load(struct config *conf, const char *conf_path,
         .vertical_letter_offset = {.pt = 0, .px = 0},
         .use_custom_underline_offset = false,
         .box_drawings_uses_font_glyphs = false,
+        .opaque_fullscreen = false,
         .ligatures = {
             .enabled = fcft_caps & FCFT_CAPABILITY_TEXT_RUN_SHAPING,
             .except_cursor = false,

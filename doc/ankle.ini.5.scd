@@ -346,6 +346,17 @@ empty string to be set, but it must be quoted: *KEY=""*
 	
 	Default: _yes_.
 
+*opaque-fullscreen*
+	Boolean. When enabled, background transparency (see *alpha*) is
+	disabled while the window is fullscreened.
+	
+	The Wayland protocol says no other content should be visible behind
+	a fullscreened window, and some compositors draw a solid black
+	background behind it, making a transparent ankle look dark
+	gray. Others show what is behind the window, e.g. the wallpaper.
+	
+	Default: _no_ (foot: always opaque when fullscreened).
+
 *dpi-aware*
 	Boolean.
 	

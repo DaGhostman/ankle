@@ -553,6 +553,8 @@ bool wayl_win_ring_bell(const struct wl_window *win);
 
 bool wayl_win_csd_titlebar_visible(const struct wl_window *win);
 bool wayl_win_csd_borders_visible(const struct wl_window *win);
+/* True if transparency is disabled, because the window is fullscreened */
+bool wayl_win_is_forced_opaque(const struct wl_window *win);
 
 bool wayl_win_subsurface_new(
     struct wl_window *win, struct wayl_sub_surface *surf,

@@ -2578,10 +2578,11 @@ wayl_win_alpha_changed(struct wl_window *win)
     struct wayland *wayl = term->wl;
 
     /*
-     * When fullscreened, transparency is disabled (see render.c).
+     * When fullscreened, transparency may be disabled (see render.c).
      * Update the opaque region to match.
      */
-    const bool is_opaque = term->colors.alpha == 0xffff || win->is_fullscreen;
+    const bool is_opaque =
+        term->colors.alpha == 0xffff || wayl_win_is_forced_opaque(win);
 
     if (is_opaque) {
         struct wl_region *region = wl_compositor_create_region(wayl->compositor);
@@ -2681,6 +2682,12 @@ wayl_win_csd_titlebar_visible(const struct wl_window *win)
     return win->csd_mode == CSD_YES &&
         !win->is_fullscreen &&
         !(win->is_maximized && win->term->conf->csd.hide_when_maximized);
+}
+
+bool
+wayl_win_is_forced_opaque(const struct wl_window *win)
+{
+    return win->is_fullscreen && win->term->conf->opaque_fullscreen;
 }
 
 bool
