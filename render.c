@@ -39,6 +39,7 @@
 #include "quirks.h"
 #include "search.h"
 #include "selection.h"
+#include "shaping.h"
 #include "shm.h"
 #include "sixel.h"
 #include "srgb.h"
@@ -848,6 +849,40 @@ cell_colors(const struct terminal *term, const struct cell *cell)
     return (struct cell_colors){.fg = _fg, .bg = _bg, .alpha = alpha};
 }
 
+/* Glyphs foot renders itself, rather than using the font */
+static inline bool
+uses_custom_glyph(const struct terminal *term, char32_t base)
+{
+    if (unlikely(term->conf->box_drawings_uses_font_glyphs))
+        return false;
+
+    return (
+        /* Classic box drawings */
+        (base >= GLYPH_BOX_DRAWING_FIRST &&
+         base <= GLYPH_BOX_DRAWING_LAST) ||
+
+        /* Braille */
+        (base >= GLYPH_BRAILLE_FIRST &&
+         base <= GLYPH_BRAILLE_LAST) ||
+
+        /*
+         * Unicode 13 "Symbols for Legacy Computing"
+         * sub-ranges below.
+         *
+         * Note, the full range is U+1FB00 - U+1FBF9
+         */
+        (base >= GLYPH_LEGACY_FIRST &&
+         base <= GLYPH_LEGACY_LAST) ||
+
+        /*
+         * Unicode 16 "Symbols for Legacy Computing Supplement"
+         *
+         * Note, the full range is U+1CC00 - U+1CEAF
+         */
+        (base >= GLYPH_OCTANTS_FIRST &&
+         base <= GLYPH_OCTANTS_LAST));
+}
+
 struct cell_glyphs {
     struct fcft_font *font;
 
@@ -876,34 +911,7 @@ cell_glyphs(struct terminal *term, const struct cell *cell,
     char32_t base = cell->wc;
 
     if (base != 0) {
-        if (unlikely(
-                /* Classic box drawings */
-                (base >= GLYPH_BOX_DRAWING_FIRST &&
-                 base <= GLYPH_BOX_DRAWING_LAST) ||
-
-                /* Braille */
-                (base >= GLYPH_BRAILLE_FIRST &&
-                 base <= GLYPH_BRAILLE_LAST) ||
-
-                /*
-                 * Unicode 13 "Symbols for Legacy Computing"
-                 * sub-ranges below.
-                 *
-                 * Note, the full range is U+1FB00 - U+1FBF9
-                 */
-                (base >= GLYPH_LEGACY_FIRST &&
-                 base <= GLYPH_LEGACY_LAST) ||
-
-                /*
-                 * Unicode 16 "Symbols for Legacy Computing Supplement"
-                 *
-                 * Note, the full range is U+1CC00 - U+1CEAF
-                 */
-                (base >= GLYPH_OCTANTS_FIRST &&
-                 base <= GLYPH_OCTANTS_LAST)) &&
-
-            likely(!term->conf->box_drawings_uses_font_glyphs))
-        {
+        if (unlikely(uses_custom_glyph(term, base))) {
             struct fcft_glyph ***arr;
             size_t count;
             size_t idx;
@@ -1164,10 +1172,90 @@ draw_cell_decorations(const struct terminal *term, pixman_image_t *pix,
     }
 }
 
+/* A sequence of cells shaped together (for ligatures) */
+struct cell_run {
+    int start;  /* First column */
+    int len;
+    const struct fcft_text_run *shaped;
+};
+
+/*
+ * Draws the part of a shaped run that falls inside the cell at
+ * 'cell_x'. The caller has set the clip region to the cell, meaning
+ * glyphs spanning multiple cells are sliced, with each slice drawn in
+ * the color of the cell it falls in.
+ */
+static void
+draw_run_glyphs(struct terminal *term, pixman_image_t *pix,
+                const struct cell *cell, const struct cell_run *run,
+                const pixman_color_t *fg, int cell_x, int y)
+{
+    const struct fcft_text_run *shaped = run->shaped;
+    const int width = term->cell_width;
+    const int run_x = term->margins.left + run->start * width + term->font_x_ofs;
+    const bool blinking_off = cell->attrs.blink && term->blink.state == BLINK_OFF;
+
+    pixman_image_t *clr_pix = NULL;
+
+    /*
+     * Glyphs are positioned at the column of their cluster (each
+     * character in a run occupies exactly one cell), offset by the
+     * advance of the preceding glyphs in the same cluster.
+     *
+     * The advance is snapped to whole cells, to stay on the grid
+     * regardless of letter-spacing. Some fonts (e.g. Monaspace)
+     * replace a ligature's characters with multiple glyphs, all
+     * belonging to the first character's cluster.
+     */
+    int cluster = -1;
+    int pen_x = 0;
+
+    for (size_t i = 0; i < shaped->count; i++) {
+        const struct fcft_glyph *glyph = shaped->glyphs[i];
+
+        if (shaped->cluster[i] != cluster) {
+            cluster = shaped->cluster[i];
+            pen_x = cluster * width;
+        }
+
+        const int glyph_x = run_x + pen_x + glyph->x;
+
+        if (glyph->advance.x > 0)
+            pen_x += max(1, (glyph->advance.x + width / 2) / width) * width;
+
+        if (glyph->width == 0 ||
+            glyph_x >= cell_x + width ||
+            glyph_x + glyph->width <= cell_x)
+        {
+            continue;
+        }
+
+        if (unlikely(glyph->is_color_glyph)) {
+            if (!blinking_off) {
+                pixman_image_composite32(
+                    PIXMAN_OP_OVER, glyph->pix, NULL, pix, 0, 0, 0, 0,
+                    glyph_x, y + term->font_baseline - glyph->y,
+                    glyph->width, glyph->height);
+            }
+        } else {
+            if (clr_pix == NULL)
+                clr_pix = pixman_image_create_solid_fill(fg);
+
+            pixman_image_composite32(
+                PIXMAN_OP_OVER, clr_pix, glyph->pix, pix, 0, 0, 0, 0,
+                glyph_x, y + term->font_baseline - glyph->y,
+                glyph->width, glyph->height);
+        }
+    }
+
+    if (clr_pix != NULL)
+        pixman_image_unref(clr_pix);
+}
+
 static int
 render_cell(struct terminal *term, pixman_image_t *pix,
             pixman_region32_t *damage, struct row *row, int row_no, int col,
-            bool has_cursor)
+            bool has_cursor, const struct cell_run *run)
 {
     struct cell *cell = &row->cells[col];
     if (cell->attrs.clean)
@@ -1190,7 +1278,14 @@ render_cell(struct terminal *term, pixman_image_t *pix,
     pixman_color_t bg = color_hex_to_pixman_with_alpha(_bg, colors.alpha, gamma_correct);
 
     struct cell_glyphs cg;
-    cell_glyphs(term, cell, &cg);
+    if (run != NULL) {
+        /* Glyphs come from the shaped run; always exactly one cell */
+        cg = (struct cell_glyphs){
+            .font = attrs_to_font(term, &cell->attrs),
+            .cols = 1,
+        };
+    } else
+        cell_glyphs(term, cell, &cg);
 
     struct fcft_font *font = cg.font;
     const struct fcft_glyph **glyphs = cg.glyphs;
@@ -1260,7 +1355,10 @@ render_cell(struct terminal *term, pixman_image_t *pix,
         goto draw_cursor;
     }
 
-    draw_cell_glyphs(term, pix, cell, &cg, &fg, x, y, cell_cols);
+    if (run != NULL)
+        draw_run_glyphs(term, pix, cell, run, &fg, x, y);
+    else
+        draw_cell_glyphs(term, pix, cell, &cg, &fg, x, y, cell_cols);
     draw_cell_decorations(
         term, pix, row, col, cell, font, &fg, gamma_correct, x, y, cell_cols);
 
@@ -1274,13 +1372,105 @@ draw_cursor:
     return cell_cols;
 }
 
+/* Can the cell be shaped together with its neighbors? */
+static bool
+cell_is_shapeable(const struct terminal *term, const struct row *row, int col)
+{
+    const struct cell *cell = &row->cells[col];
+    const char32_t wc = cell->wc;
+
+    /* Empty cells, spaces, tabs */
+    if (wc <= U' ')
+        return false;
+
+    /* Combining characters, grapheme clusters and spacers */
+    if (wc >= CELL_COMB_CHARS_LO)
+        return false;
+
+    if (cell->attrs.conceal)
+        return false;
+
+    /* Double-width characters are followed by spacer cells */
+    if (col + 1 < term->cols && row->cells[col + 1].wc >= CELL_SPACER)
+        return false;
+
+    return !uses_custom_glyph(term, wc);
+}
+
+static void
+render_row_shaped(struct terminal *term, pixman_image_t *pix,
+                  pixman_region32_t *damage, struct row *row,
+                  int row_no, int cursor_col)
+{
+    const int cols = term->cols;
+
+    struct cell_run runs[cols];
+    const struct cell_run *run_for_col[cols];
+    size_t run_count = 0;
+
+    char32_t text[cols];
+
+    for (int col = 0; col < cols; ) {
+        if (!cell_is_shapeable(term, row, col)) {
+            run_for_col[col++] = NULL;
+            continue;
+        }
+
+        struct fcft_font *font = attrs_to_font(term, &row->cells[col].attrs);
+
+        const int start = col;
+        size_t len = 0;
+
+        do {
+            text[len++] = row->cells[col++].wc;
+        } while (col < cols &&
+                 cell_is_shapeable(term, row, col) &&
+                 attrs_to_font(term, &row->cells[col].attrs) == font);
+
+        const struct fcft_text_run *shaped = NULL;
+
+        /* A single character can't form a ligature */
+        if (len > 1) {
+            shaped = shaping_cache_lookup(
+                term->render.shaping_cache, font, term->font_subpixel,
+                len, text);
+        }
+
+        const struct cell_run *run = NULL;
+
+        if (shaped != NULL && shaped->count > 0) {
+            struct cell_run *r = &runs[run_count++];
+            *r = (struct cell_run){
+                .start = start,
+                .len = len,
+                .shaped = shaped,
+            };
+            run = r;
+        }
+
+        for (int i = start; i < col; i++)
+            run_for_col[i] = run;
+    }
+
+    for (int col = cols - 1; col >= 0; col--) {
+        render_cell(term, pix, damage, row, row_no, col, cursor_col == col,
+                    run_for_col[col]);
+    }
+}
+
 static void
 render_row(struct terminal *term, pixman_image_t *pix,
            pixman_region32_t *damage, struct row *row,
            int row_no, int cursor_col)
 {
+    if (term->render.shaping_cache != NULL) {
+        render_row_shaped(term, pix, damage, row, row_no, cursor_col);
+        return;
+    }
+
     for (int col = term->cols - 1; col >= 0; col--)
-        render_cell(term, pix, damage, row, row_no, col, cursor_col == col);
+        render_cell(term, pix, damage, row, row_no, col, cursor_col == col,
+                    NULL);
 }
 
 static void
@@ -1731,7 +1921,8 @@ render_sixel(struct terminal *term, pixman_image_t *pix,
                     if ((last_row_needs_erase && last_row) ||
                         (last_col_needs_erase && last_col))
                     {
-                        render_cell(term, pix, damage, row, term_row_no, col, cursor_col == col);
+                        render_cell(term, pix, damage, row, term_row_no,
+                                    col, cursor_col == col, NULL);
                     } else {
                         cell->attrs.clean = 1;
                         cell->attrs.confined = 1;
@@ -1904,7 +2095,7 @@ render_ime_preedit_for_seat(struct terminal *term, struct seat *seat,
             break;
 
         row->cells[col_idx + i] = *cell;
-        render_cell(term, buf->pix[0], NULL, row, row_idx, col_idx + i, false);
+        render_cell(term, buf->pix[0], NULL, row, row_idx, col_idx + i, false, NULL);
     }
 
     int start = seat->ime.preedit.cursor.start - ime_ofs;
@@ -3596,6 +3787,23 @@ grid_render(struct terminal *term)
         }
     }
 
+    if (term->render.shaping_cache != NULL) {
+        /*
+         * With ligatures, a change in one cell may change how its
+         * neighbors are rendered (e.g. typing '>' after '-'). For
+         * now, simply re-render dirty rows in their entirety.
+         */
+        for (int r = 0; r < term->rows; r++) {
+            struct row *row = grid_row_in_view(term->grid, r);
+
+            if (!row->dirty)
+                continue;
+
+            for (int c = 0; c < term->cols; c++)
+                row->cells[c].attrs.clean = false;
+        }
+    }
+
 #if defined(_DEBUG)
     for (int r = 0; r < term->rows; r++) {
         const struct row *row = grid_row_in_view(term->grid, r);
@@ -3662,6 +3870,9 @@ grid_render(struct terminal *term)
             sem_wait(&term->render.workers.done);
         term->render.workers.buf = NULL;
     }
+
+    /* Workers are idle; safe to evict cached runs */
+    shaping_cache_frame_done(term->render.shaping_cache);
 
     for (size_t i = 0; i < term->render.workers.count; i++)
         pixman_region32_union(&damage, &damage, &buf->dirty[i + 1]);

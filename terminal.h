@@ -710,6 +710,9 @@ struct terminal {
             } preapplied_damage;
         } workers;
 
+        /* Shaped text runs, used when rendering ligatures */
+        struct shaping_cache *shaping_cache;
+
         /* Last rendered cursor position */
         struct {
             struct row *row;

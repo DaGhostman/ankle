@@ -489,6 +489,7 @@ test_section_main(void)
 
     test_boolean(&ctx, &parse_section_main, "login-shell", &conf.login_shell);
     test_boolean(&ctx, &parse_section_main, "box-drawings-uses-font-glyphs", &conf.box_drawings_uses_font_glyphs);
+    test_boolean(&ctx, &parse_section_main, "ligatures", &conf.ligatures);
     test_boolean(&ctx, &parse_section_main, "locked-title", &conf.locked_title);
     test_boolean(&ctx, &parse_section_main, "dpi-aware", &conf.dpi_aware);
     test_boolean(&ctx, &parse_section_main, "gamma-correct-blending", &conf.gamma_correct);

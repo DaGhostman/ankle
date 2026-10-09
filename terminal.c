@@ -37,6 +37,7 @@
 #include "reaper.h"
 #include "render.h"
 #include "selection.h"
+#include "shaping.h"
 #include "shm.h"
 #include "sixel.h"
 #include "slave.h"
@@ -814,6 +815,9 @@ static bool
 term_set_fonts(struct terminal *term, struct fcft_font *fonts[static 4],
                bool resize_grid)
 {
+    /* Cache is keyed on font pointers, which are about to be free:d */
+    shaping_cache_flush(term->render.shaping_cache);
+
     for (size_t i = 0; i < 4; i++) {
         xassert(fonts[i] != NULL);
 
@@ -1416,6 +1420,9 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
 
     pixman_region32_init(&term->render.last_overlay_clip);
 
+    if (conf->ligatures)
+        term->render.shaping_cache = shaping_cache_init();
+
     term_update_ascii_printer(term);
     memcpy(term->colors.table, theme->table, sizeof(term->colors.table));
 
@@ -1875,6 +1882,8 @@ term_destroy(struct terminal *term)
     free(term->app_id);
     free(term->window_title);
     tll_free_and_free(term->window_title_stack, free);
+
+    shaping_cache_destroy(term->render.shaping_cache);
 
     for (size_t i = 0; i < sizeof(term->fonts) / sizeof(term->fonts[0]); i++)
         fcft_destroy(term->fonts[i]);

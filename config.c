@@ -1156,6 +1156,21 @@ parse_section_main(struct context *ctx)
     else if (streq(key, "box-drawings-uses-font-glyphs"))
         return value_to_bool(ctx, &conf->box_drawings_uses_font_glyphs);
 
+    else if (streq(key, "ligatures")) {
+        if (!value_to_bool(ctx, &conf->ligatures))
+            return false;
+
+        if (conf->ligatures &&
+            !(fcft_capabilities() & FCFT_CAPABILITY_TEXT_RUN_SHAPING))
+        {
+            LOG_CONTEXTUAL_WARN(
+                "fcft was not compiled with support for text-run shaping");
+            conf->ligatures = false;
+        }
+
+        return true;
+    }
+
     else if (streq(key, "utmp-helper")) {
         if (!value_to_str(ctx, &conf->utmp_helper_path))
             return false;
@@ -3542,6 +3557,7 @@ config_load(struct config *conf, const char *conf_path,
         .vertical_letter_offset = {.pt = 0, .px = 0},
         .use_custom_underline_offset = false,
         .box_drawings_uses_font_glyphs = false,
+        .ligatures = false,
         .underline_thickness = {.pt = 0., .px = -1},
         .strikeout_thickness = {.pt = 0., .px = -1},
         .dpi_aware = false,

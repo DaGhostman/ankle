@@ -332,6 +332,7 @@ executable(
   'quirks.c', 'quirks.h',
   'reaper.c', 'reaper.h',
   'render.c', 'render.h',
+  'shaping.c', 'shaping.h',
   'search.c', 'search.h',
   'server.c', 'server.h', 'client-protocol.h',
   'shm.c', 'shm.h',

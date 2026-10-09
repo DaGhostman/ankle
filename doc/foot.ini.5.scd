@@ -265,6 +265,27 @@ empty string to be set, but it must be quoted: *KEY=""*
 	
 	Default: _no_.
 
+*ligatures*
+	Boolean. When enabled, foot shapes sequences of characters together,
+	allowing fonts to render ligatures (e.g. *->* or *!=* drawn as a
+	single symbol), and contextual alternates (e.g. Monaspace's "texture
+	healing").
+	
+	Which ligatures are used is controlled by the font's features. Most
+	fonts enable *calt* and *liga* by default; additional sets must be
+	enabled with *fontfeatures*, in the *font* option. For example:
+	
+		*font=Monaspace Neon:fontfeatures=calt:fontfeatures=ss01:fontfeatures=ss03*
+	
+	Ligatures are not formed across spaces, changes in font style
+	(e.g. bold), double-width characters or combining characters. A
+	ligature spanning cells with different colors is drawn in each
+	cell's color.
+	
+	Requires fcft to be compiled with text-run shaping support.
+	
+	Default: _no_.
+
 *dpi-aware*
 	Boolean.
 	
