@@ -3956,6 +3956,17 @@ grid_render(struct terminal *term)
         int box_count = 0;
         pixman_box32_t *boxes = pixman_region32_rectangles(&damage, &box_count);
 
+        /*
+         * Thousands of damage requests can overflow the Wayland
+         * connection's buffer, killing the connection
+         * (https://codeberg.org/dnkl/foot/issues/2338). Past a point,
+         * damaging the bounding box is cheaper anyway.
+         */
+        if (box_count > 256) {
+            boxes = pixman_region32_extents(&damage);
+            box_count = 1;
+        }
+
         for (size_t i = 0; i < box_count; i++) {
             wl_surface_damage_buffer(
                 term->window->surface.surf,
