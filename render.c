@@ -1262,7 +1262,10 @@ render_cell(struct terminal *term, pixman_image_t *pix,
         return 0;
 
     cell->attrs.clean = 1;
-    cell->attrs.confined = true;
+
+    /* Cells in a run are linked to their right neighbor; see
+     * link_row_runs() */
+    cell->attrs.confined = run == NULL || col == run->start + run->len - 1;
 
     int width = term->cell_width;
     int height = term->cell_height;
@@ -1397,6 +1400,53 @@ cell_is_shapeable(const struct terminal *term, const struct row *row, int col)
     return !uses_custom_glyph(term, wc);
 }
 
+/*
+ * Returns the (exclusive) end column of the run starting at 'start',
+ * which must be shapeable. Runs only depend on cell content, not on
+ * shaping results.
+ */
+static int
+run_end(const struct terminal *term, const struct row *row, int start)
+{
+    const struct fcft_font *font = attrs_to_font(term, &row->cells[start].attrs);
+
+    int col = start + 1;
+    while (col < term->cols &&
+           cell_is_shapeable(term, row, col) &&
+           attrs_to_font(term, &row->cells[col].attrs) == font)
+    {
+        col++;
+    }
+
+    return col;
+}
+
+/*
+ * Marks cells in multi-cell runs as not confined, i.e. linked to their
+ * right neighbor. Together with the overflowing glyphs pre-pass, this
+ * ensures all cells of a run are re-rendered when any of them is
+ * dirty.
+ *
+ * Bits are only cleared here; cells keep the state from when they
+ * were last rendered. This way, both runs that are about to form,
+ * and runs that are about to break up, are re-rendered.
+ */
+static void
+link_row_runs(const struct terminal *term, struct row *row)
+{
+    for (int col = 0; col < term->cols; ) {
+        if (!cell_is_shapeable(term, row, col)) {
+            col++;
+            continue;
+        }
+
+        const int end = run_end(term, row, col);
+        for (; col < end - 1; col++)
+            row->cells[col].attrs.confined = false;
+        col = end;
+    }
+}
+
 static void
 render_row_shaped(struct terminal *term, pixman_image_t *pix,
                   pixman_region32_t *damage, struct row *row,
@@ -1416,24 +1466,25 @@ render_row_shaped(struct terminal *term, pixman_image_t *pix,
             continue;
         }
 
-        struct fcft_font *font = attrs_to_font(term, &row->cells[col].attrs);
-
         const int start = col;
-        size_t len = 0;
+        const int end = run_end(term, row, start);
+        const size_t len = end - start;
 
-        do {
-            text[len++] = row->cells[col++].wc;
-        } while (col < cols &&
-                 cell_is_shapeable(term, row, col) &&
-                 attrs_to_font(term, &row->cells[col].attrs) == font);
+        bool dirty = false;
+        for (; col < end; col++) {
+            text[col - start] = row->cells[col].wc;
+            dirty = dirty || !row->cells[col].attrs.clean;
+        }
 
         const struct fcft_text_run *shaped = NULL;
 
-        /* A single character can't form a ligature */
-        if (len > 1) {
+        /* A single character can't form a ligature, and there's no
+         * need to shape runs that won't be rendered */
+        if (len > 1 && dirty) {
             shaped = shaping_cache_lookup(
-                term->render.shaping_cache, font, term->font_subpixel,
-                len, text);
+                term->render.shaping_cache,
+                attrs_to_font(term, &row->cells[start].attrs),
+                term->font_subpixel, len, text);
         }
 
         const struct cell_run *run = NULL;
@@ -3719,9 +3770,26 @@ grid_render(struct terminal *term)
         cursor.row &= term->grid->num_rows - 1;
     }
 
-    if (term->conf->tweak.overflowing_glyphs) {
+    if (term->render.shaping_cache != NULL) {
         /*
-         * Pre-pass to dirty cells affected by overflowing glyphs.
+         * With ligatures, a change in one cell may change how its
+         * neighbors are rendered (e.g. typing '>' after '-'). Link
+         * the cells of each run, and let the pre-pass below dirty
+         * entire runs.
+         */
+        for (int r = 0; r < term->rows; r++) {
+            struct row *row = grid_row_in_view(term->grid, r);
+            if (row->dirty)
+                link_row_runs(term, row);
+        }
+    }
+
+    if (term->conf->tweak.overflowing_glyphs ||
+        term->render.shaping_cache != NULL)
+    {
+        /*
+         * Pre-pass to dirty cells affected by overflowing glyphs
+         * (and ligatures, see above).
          *
          * Given any two pair of cells where the first cell is
          * overflowing into the second, *both* cells must be
@@ -3784,23 +3852,6 @@ grid_render(struct terminal *term)
                         break;
                 }
             }
-        }
-    }
-
-    if (term->render.shaping_cache != NULL) {
-        /*
-         * With ligatures, a change in one cell may change how its
-         * neighbors are rendered (e.g. typing '>' after '-'). For
-         * now, simply re-render dirty rows in their entirety.
-         */
-        for (int r = 0; r < term->rows; r++) {
-            struct row *row = grid_row_in_view(term->grid, r);
-
-            if (!row->dirty)
-                continue;
-
-            for (int c = 0; c < term->cols; c++)
-                row->cells[c].attrs.clean = false;
         }
     }
 
