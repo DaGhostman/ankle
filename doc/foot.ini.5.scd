@@ -266,10 +266,16 @@ empty string to be set, but it must be quoted: *KEY=""*
 	Default: _no_.
 
 *ligatures*
-	Boolean. When enabled, foot shapes sequences of characters together,
-	allowing fonts to render ligatures (e.g. *->* or *!=* drawn as a
-	single symbol), and contextual alternates (e.g. Monaspace's "texture
-	healing").
+	Boolean, or *except-cursor*. When enabled, foot shapes sequences of
+	characters together, allowing fonts to render ligatures (e.g. *->*
+	or *!=* drawn as a single symbol), and contextual alternates
+	(e.g. Monaspace's "texture healing").
+	
+	With *except-cursor*, ligatures are broken up at the cursor, making
+	it easier to see (and edit) the individual characters.
+	
+	Applications can toggle ligatures at run-time with the private mode
+	*767371* (see *foot-ctlseqs*(7)).
 	
 	Which ligatures are used is controlled by the font's features. Most
 	fonts enable *calt* and *liga* by default; additional sets must be

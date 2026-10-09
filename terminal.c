@@ -1412,6 +1412,7 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
         .foot_exe = xstrdup(foot_exe),
         .cwd = xstrdup(cwd),
         .grapheme_shaping = conf->tweak.grapheme_shaping,
+        .ligatures = false,
 #if defined(FOOT_IME_ENABLED) && FOOT_IME_ENABLED
         .ime_enabled = true,
 #endif
@@ -1420,8 +1421,10 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
 
     pixman_region32_init(&term->render.last_overlay_clip);
 
-    if (conf->ligatures)
+    if (conf->ligatures.enabled) {
         term->render.shaping_cache = shaping_cache_init();
+        term->ligatures = term->render.shaping_cache != NULL;
+    }
 
     term_update_ascii_printer(term);
     memcpy(term->colors.table, theme->table, sizeof(term->colors.table));
@@ -2178,6 +2181,7 @@ term_reset(struct terminal *term, bool hard)
         notify_icon_free(&term->notification_icons[i]);
 
     term->grapheme_shaping = term->conf->tweak.grapheme_shaping;
+    term_set_ligatures(term, term->conf->ligatures.enabled);
 
 #if defined(FOOT_IME_ENABLED) && FOOT_IME_ENABLED
     term_ime_enable(term);
@@ -2528,6 +2532,32 @@ void
 term_damage_view(struct terminal *term)
 {
     term_damage_rows_in_view(term, 0, term->rows - 1);
+}
+
+void
+term_set_ligatures(struct terminal *term, bool enable)
+{
+    if (enable == term->ligatures)
+        return;
+
+    if (enable) {
+        if (!(fcft_capabilities() & FCFT_CAPABILITY_TEXT_RUN_SHAPING))
+            return;
+
+        /* Created on demand, since ligatures may be enabled at
+         * run-time, even if disabled in the configuration */
+        if (term->render.shaping_cache == NULL) {
+            term->render.shaping_cache = shaping_cache_init();
+            if (term->render.shaping_cache == NULL)
+                return;
+        }
+    }
+
+    term->ligatures = enable;
+
+    /* Re-render everything with (or without) ligatures */
+    if (term->grid != NULL)
+        term_damage_view(term);
 }
 
 void

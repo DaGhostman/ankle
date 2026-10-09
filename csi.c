@@ -595,6 +595,10 @@ decset_decrst(struct terminal *term, unsigned param, bool enable)
         }
         break;
 
+    case 767371:
+        term_set_ligatures(term, enable);
+        break;
+
     default:
         UNHANDLED();
         break;
@@ -674,6 +678,9 @@ decrqm(const struct terminal *term, unsigned param)
     case 2048: return decrpm(term->size_notifications);
     case 8452: return decrpm(term->sixel.cursor_right_of_graphics);
     case 737769: return decrpm(term_ime_is_enabled(term));
+    case 767371: return !(fcft_capabilities() & FCFT_CAPABILITY_TEXT_RUN_SHAPING)
+        ? DECRPM_PERMANENTLY_RESET
+        : decrpm(term->ligatures);
     }
 
     return DECRPM_NOT_RECOGNIZED;
@@ -721,6 +728,7 @@ xtsave(struct terminal *term, unsigned param)
     case 2048: term->xtsave.size_notifications = term->size_notifications; break;
     case 8452: term->xtsave.sixel_cursor_right_of_graphics = term->sixel.cursor_right_of_graphics; break;
     case 737769: term->xtsave.ime = term_ime_is_enabled(term); break;
+    case 767371: term->xtsave.ligatures = term->ligatures; break;
     }
 }
 
@@ -767,6 +775,7 @@ xtrestore(struct terminal *term, unsigned param)
     case 2048: enable = term->xtsave.size_notifications; break;
     case 8452: enable = term->xtsave.sixel_cursor_right_of_graphics; break;
     case 737769: enable = term->xtsave.ime; break;
+    case 767371: enable = term->xtsave.ligatures; break;
 
     default: return;
     }

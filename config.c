@@ -1157,15 +1157,21 @@ parse_section_main(struct context *ctx)
         return value_to_bool(ctx, &conf->box_drawings_uses_font_glyphs);
 
     else if (streq(key, "ligatures")) {
-        if (!value_to_bool(ctx, &conf->ligatures))
-            return false;
+        if (streq(value, "except-cursor")) {
+            conf->ligatures.enabled = true;
+            conf->ligatures.except_cursor = true;
+        } else {
+            if (!value_to_bool(ctx, &conf->ligatures.enabled))
+                return false;
+            conf->ligatures.except_cursor = false;
+        }
 
-        if (conf->ligatures &&
+        if (conf->ligatures.enabled &&
             !(fcft_capabilities() & FCFT_CAPABILITY_TEXT_RUN_SHAPING))
         {
             LOG_CONTEXTUAL_WARN(
                 "fcft was not compiled with support for text-run shaping");
-            conf->ligatures = false;
+            conf->ligatures.enabled = false;
         }
 
         return true;
@@ -3557,7 +3563,7 @@ config_load(struct config *conf, const char *conf_path,
         .vertical_letter_offset = {.pt = 0, .px = 0},
         .use_custom_underline_offset = false,
         .box_drawings_uses_font_glyphs = false,
-        .ligatures = false,
+        .ligatures = {.enabled = false, .except_cursor = false},
         .underline_thickness = {.pt = 0., .px = -1},
         .strikeout_thickness = {.pt = 0., .px = -1},
         .dpi_aware = false,

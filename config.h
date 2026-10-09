@@ -289,7 +289,11 @@ struct config {
 
     bool box_drawings_uses_font_glyphs;
     bool can_shape_grapheme;
-    bool ligatures;
+
+    struct {
+        bool enabled;
+        bool except_cursor;
+    } ligatures;
 
     struct {
         enum {

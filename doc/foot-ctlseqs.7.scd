@@ -355,6 +355,9 @@ that corresponds to one of the following modes:
 |  737769
 :  foot
 :  Input Method Editor (IME) mode
+|  767371
+:  foot (fork)
+:  Ligatures (see *ligatures* in *foot.ini*(5))
 
 ## Window manipulation
 

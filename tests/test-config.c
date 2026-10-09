@@ -489,7 +489,20 @@ test_section_main(void)
 
     test_boolean(&ctx, &parse_section_main, "login-shell", &conf.login_shell);
     test_boolean(&ctx, &parse_section_main, "box-drawings-uses-font-glyphs", &conf.box_drawings_uses_font_glyphs);
-    test_boolean(&ctx, &parse_section_main, "ligatures", &conf.ligatures);
+    test_boolean(&ctx, &parse_section_main, "ligatures", &conf.ligatures.enabled);
+    {
+        ctx.key = "ligatures";
+        ctx.value = "except-cursor";
+        if (!parse_section_main(&ctx) ||
+            !conf.ligatures.enabled || !conf.ligatures.except_cursor)
+        {
+            BUG("[main].ligatures=except-cursor: failed to parse");
+        }
+
+        ctx.value = "yes";
+        if (!parse_section_main(&ctx) || conf.ligatures.except_cursor)
+            BUG("[main].ligatures=yes: did not reset except-cursor");
+    }
     test_boolean(&ctx, &parse_section_main, "locked-title", &conf.locked_title);
     test_boolean(&ctx, &parse_section_main, "dpi-aware", &conf.dpi_aware);
     test_boolean(&ctx, &parse_section_main, "gamma-correct-blending", &conf.gamma_correct);

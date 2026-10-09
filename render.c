@@ -1375,12 +1375,29 @@ draw_cursor:
     return cell_cols;
 }
 
+static inline bool
+ligatures_enabled(const struct terminal *term)
+{
+    return term->ligatures && term->render.shaping_cache != NULL;
+}
+
+/* Column at which runs are broken up (i.e. the cursor), or -1 */
+static inline int
+ligatures_break_col(const struct terminal *term, int cursor_col)
+{
+    return term->conf->ligatures.except_cursor ? cursor_col : -1;
+}
+
 /* Can the cell be shaped together with its neighbors? */
 static bool
-cell_is_shapeable(const struct terminal *term, const struct row *row, int col)
+cell_is_shapeable(const struct terminal *term, const struct row *row, int col,
+                  int break_col)
 {
     const struct cell *cell = &row->cells[col];
     const char32_t wc = cell->wc;
+
+    if (col == break_col)
+        return false;
 
     /* Empty cells, spaces, tabs */
     if (wc <= U' ')
@@ -1406,13 +1423,14 @@ cell_is_shapeable(const struct terminal *term, const struct row *row, int col)
  * shaping results.
  */
 static int
-run_end(const struct terminal *term, const struct row *row, int start)
+run_end(const struct terminal *term, const struct row *row, int start,
+        int break_col)
 {
     const struct fcft_font *font = attrs_to_font(term, &row->cells[start].attrs);
 
     int col = start + 1;
     while (col < term->cols &&
-           cell_is_shapeable(term, row, col) &&
+           cell_is_shapeable(term, row, col, break_col) &&
            attrs_to_font(term, &row->cells[col].attrs) == font)
     {
         col++;
@@ -1432,15 +1450,15 @@ run_end(const struct terminal *term, const struct row *row, int start)
  * and runs that are about to break up, are re-rendered.
  */
 static void
-link_row_runs(const struct terminal *term, struct row *row)
+link_row_runs(const struct terminal *term, struct row *row, int break_col)
 {
     for (int col = 0; col < term->cols; ) {
-        if (!cell_is_shapeable(term, row, col)) {
+        if (!cell_is_shapeable(term, row, col, break_col)) {
             col++;
             continue;
         }
 
-        const int end = run_end(term, row, col);
+        const int end = run_end(term, row, col, break_col);
         for (; col < end - 1; col++)
             row->cells[col].attrs.confined = false;
         col = end;
@@ -1453,6 +1471,7 @@ render_row_shaped(struct terminal *term, pixman_image_t *pix,
                   int row_no, int cursor_col)
 {
     const int cols = term->cols;
+    const int break_col = ligatures_break_col(term, cursor_col);
 
     struct cell_run runs[cols];
     const struct cell_run *run_for_col[cols];
@@ -1461,13 +1480,13 @@ render_row_shaped(struct terminal *term, pixman_image_t *pix,
     char32_t text[cols];
 
     for (int col = 0; col < cols; ) {
-        if (!cell_is_shapeable(term, row, col)) {
+        if (!cell_is_shapeable(term, row, col, break_col)) {
             run_for_col[col++] = NULL;
             continue;
         }
 
         const int start = col;
-        const int end = run_end(term, row, start);
+        const int end = run_end(term, row, start, break_col);
         const size_t len = end - start;
 
         bool dirty = false;
@@ -1514,7 +1533,7 @@ render_row(struct terminal *term, pixman_image_t *pix,
            pixman_region32_t *damage, struct row *row,
            int row_no, int cursor_col)
 {
-    if (term->render.shaping_cache != NULL) {
+    if (ligatures_enabled(term)) {
         render_row_shaped(term, pix, damage, row, row_no, cursor_col);
         return;
     }
@@ -3770,7 +3789,7 @@ grid_render(struct terminal *term)
         cursor.row &= term->grid->num_rows - 1;
     }
 
-    if (term->render.shaping_cache != NULL) {
+    if (ligatures_enabled(term)) {
         /*
          * With ligatures, a change in one cell may change how its
          * neighbors are rendered (e.g. typing '>' after '-'). Link
@@ -3779,14 +3798,16 @@ grid_render(struct terminal *term)
          */
         for (int r = 0; r < term->rows; r++) {
             struct row *row = grid_row_in_view(term->grid, r);
-            if (row->dirty)
-                link_row_runs(term, row);
+            if (!row->dirty)
+                continue;
+
+            const int break_col = ligatures_break_col(
+                term, cursor.row == r ? cursor.col : -1);
+            link_row_runs(term, row, break_col);
         }
     }
 
-    if (term->conf->tweak.overflowing_glyphs ||
-        term->render.shaping_cache != NULL)
-    {
+    if (term->conf->tweak.overflowing_glyphs || ligatures_enabled(term)) {
         /*
          * Pre-pass to dirty cells affected by overflowing glyphs
          * (and ligatures, see above).

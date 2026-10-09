@@ -542,6 +542,7 @@ struct terminal {
         bool ime:1;
         bool app_sync_updates:1;
         bool grapheme_shaping:1;
+        bool ligatures:1;
         bool report_theme_changes:1;
 
         bool size_notifications:1;
@@ -838,6 +839,7 @@ struct terminal {
     char *cwd;
 
     bool grapheme_shaping;
+    bool ligatures;  /* Runtime state; see term_set_ligatures() */
     bool size_notifications;
 };
 
@@ -881,6 +883,7 @@ void term_damage_rows_in_view(struct terminal *term, int start, int end);
 
 void term_damage_all(struct terminal *term);
 void term_damage_view(struct terminal *term);
+void term_set_ligatures(struct terminal *term, bool enable);
 
 void term_damage_cursor(struct terminal *term);
 void term_damage_margins(struct terminal *term);
