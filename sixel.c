@@ -1705,7 +1705,7 @@ sixel_add_many_generic(struct terminal *term, uint8_t c, unsigned count)
 
     count *= term->sixel.pad;
 
-    if (unlikely(col + count - 1 >= width)) {
+    if (unlikely((int64_t)col + count > width)) {
         resize_horizontally(term, col + count);
         width = term->sixel.image.width;
         count = min(count, max(width - col, 0));
@@ -1763,7 +1763,7 @@ sixel_add_many_ar_11(struct terminal *term, uint8_t c, unsigned count)
     int col = term->sixel.pos.col;
     int width = term->sixel.image.width;
 
-    if (unlikely(col + count - 1 >= width)) {
+    if (unlikely((int64_t)col + count > width)) {
         resize_horizontally(term, col + count);
         width = term->sixel.image.width;
         count = min(count, max(width - col, 0));
@@ -1987,6 +1987,10 @@ decgri_generic(struct terminal *term, uint8_t c)
         unsigned param = term->sixel.param;
         param *= 10;
         param += c - '0';
+
+        /* Repeating beyond the max image width is pointless, and an
+         * unbounded count overflows the bounds checks below */
+        param = min(param, SIXEL_MAX_WIDTH);
         term->sixel.repeat_count = term->sixel.param = param;
         break;
     }
