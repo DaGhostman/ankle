@@ -1,5 +1,12 @@
 # Benchmarks
 
+**Note**: these benchmarks were done on **foot**, before ankle was
+forked from it, and have not been re-run on ankle. With
+`ligatures=no`, ankle renders the same way foot does. With ligatures
+enabled (the default), text has to be shaped before it is rendered,
+which makes rendering slower; how much depends on the font and the
+amount of changed text per frame.
+
 ## vtebench
 
 All benchmarks are done using [vtebench](https://github.com/alacritty/vtebench):

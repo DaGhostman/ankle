@@ -5,20 +5,17 @@ body:
   - type: markdown
     attributes:
       value: |
-        Please search the man page (`foot.ini(5)` and `foot(1)`);
+        Please search the man pages (`ankle.ini(5)` and `ankle(1)`);
         maybe the feature already exists?
 
         If the feature does not exist in your installed version of
-        foot, please check the **latest** version of foot; maybe the
+        ankle, please check the **latest** version of ankle; maybe the
         feature has already been added?
 
         Please describe your feature request in as much details as
         possible. Describe your use case. Explain why the existing
-        feature set is not sufficient. Foot is (trying to be) a
-        minimalistic terminal emulator; explain how your desired
-        feature does not add bloat.
-
-        **No generative AI / LLM generated feature requests!**
+        feature set is not sufficient. Ankle aims to stay fast and
+        lightweight; explain how your desired feature fits that.
   - type: textarea
     id: request
     attributes:

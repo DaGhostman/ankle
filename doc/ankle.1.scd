@@ -17,6 +17,10 @@ arguments, to execute (instead of the default shell).
 *ankle* is a Wayland terminal emulator. Running it without arguments
 will start a new terminal window with your default shell.
 
+ankle is a fork of foot (https://codeberg.org/dnkl/foot), adding
+ligatures, OpenType font features and configuration reloading, among
+other things. It is developed with the help of AI coding assistants.
+
 You can override the default shell by appending a custom command to
 the ankle command line
 
@@ -505,7 +509,7 @@ will open in the current working directory, if the shell in the
 "parent" terminal reports directory changes.
 
 This is done with the OSC-7 escape sequence. Most shells can be
-scripted to do this, if they do not support it natively. See the wiki
+scripted to do this, if they do not support it natively. See foot's wiki
 (https://codeberg.org/dnkl/foot/wiki#user-content-spawning-new-terminal-instances-in-the-current-working-directory)
 for details.
 
@@ -524,7 +528,7 @@ In zsh, one way to do this is to add a _precmd_ hook:
 		print -Pn "\\e]133;A\\e\\\\"
 	}*
 
-See the wiki
+See foot's wiki
 (https://codeberg.org/dnkl/foot/wiki#user-content-jumping-between-prompts)
 for details, and examples for other shells.
 
@@ -548,15 +552,15 @@ sequence before command output starts, and an OSC-133;D
 
 In fish, one way to do this is to add _preexec_ and _postexec_ hooks:
 
-	*function foot_cmd_start --on-event fish_preexec
+	*function ankle_cmd_start --on-event fish_preexec
 		echo -en "\\e]133;C\\e\\\\"
 	end*
 
-	*function foot_cmd_end --on-event fish_postexec
+	*function ankle_cmd_end --on-event fish_postexec
 		echo -en "\\e]133;D\\e\\\\"
 	end*
 
-See the wiki
+See foot's wiki
 (https://codeberg.org/dnkl/foot/wiki#user-content-piping-last-commands-output)
 for details, and examples for other shells
 
@@ -732,8 +736,9 @@ You can also send SIGUSR1/SIGUSR2 to an ankleclient instance, see
 
 # BUGS
 
-ankle is a fork of ankle (https://codeberg.org/dnkl/ankle). Please do
-not report bugs in ankle to the ankle project.
+ankle is a fork of foot (https://codeberg.org/dnkl/foot). Please
+report ankle bugs to https://github.com/DaGhostman/ankle/issues, not
+to foot.
 
 Before you open a new issue, please search existing bug reports, both
 open and closed ones. Chances are someone else has already reported
@@ -747,10 +752,6 @@ The report should contain the following:
 - If reporting a crash, please try to provide a *bt full* backtrace
   with symbols.
 - Steps to reproduce. The more details the better.
-
-# IRC
-
-\#ankle on irc.libera.chat
 
 # SEE ALSO
 

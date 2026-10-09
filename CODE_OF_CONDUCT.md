@@ -50,8 +50,8 @@ decisions when appropriate.
 
 ## Scope
 
-Participants in the foot community are expected to uphold the described
-standards not only in official community spaces (issue trackers, IRC channels,
+Participants in the ankle community are expected to uphold the described
+standards not only in official community spaces (issue trackers, pull requests,
 etc.) but in all public spaces. The Code of Conduct however does acknowledge
 that people are fallible and that it is possible to truly correct a past
 pattern of unacceptable behavior. That is to say, the scope of the Code of
@@ -61,8 +61,9 @@ Conduct does not necessarily extend into the distant past.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior
 may be reported to the community leaders responsible for enforcement
-at [daniel@ekloef.se](mailto:daniel@ekloef.se).  All complaints will
-be reviewed and investigated promptly and fairly.
+by contacting the maintainer, [@DaGhostman](https://github.com/DaGhostman)
+on GitHub.  All complaints will be reviewed and investigated promptly
+and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.

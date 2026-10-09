@@ -11,13 +11,13 @@ body:
         Don't forget to search the issue tracker in case there is
         already an open issue for the bug you found.
 
-        **No generative AI / LLM generated issues!**
+        Please report ankle bugs here, not to foot.
   - type: input
     id: version
     attributes:
-      label: Foot Version
-      description: "The output of `foot --version`"
-      placeholder: "foot version: 1.17.2-11-gc4f13809 (May 20 2024, branch 'master') +pgo +ime +graphemes -assertions"
+      label: Ankle Version
+      description: "The output of `ankle --version`"
+      placeholder: "ankle version: 1.28.0-28-g13cbd737 (Oct 09 2026, branch 'master') -pgo +ime +graphemes +toplevel-tag +blur -assertions"
     validations:
       required: true
   - type: input
@@ -48,7 +48,7 @@ body:
     id: multiplexer
     attributes:
       label: Terminal multiplexer
-      description: "Terminal multiplexers are terminal emulators themselves, therefore the issue may be in the multiplexer, not foot. Please list which multiplexer(s) you use here (and mention in the problem description below if the issue only occurs in the multiplexer, but not in bare metal foot)"
+      description: "Terminal multiplexers are terminal emulators themselves, therefore the issue may be in the multiplexer, not ankle. Please list which multiplexer(s) you use here (and mention in the problem description below if the issue only occurs in the multiplexer, but not in bare metal ankle)"
       placeholder: "tmux, zellij"
   - type: input
     id: application
@@ -60,15 +60,15 @@ body:
     id: server
     attributes:
       label: Server/standalone mode
-      description: Does the issue occur in foot server, or standalone mode, or both? Note that you **cannot** test standalone mode by manually running `foot` from a `footclient` instance, since then the standalone foot will simply inherit the server process' context.
+      description: Does the issue occur in ankle server, or standalone mode, or both? Note that you **cannot** test standalone mode by manually running `ankle` from an `ankleclient` instance, since then the standalone ankle will simply inherit the server process' context.
       options:
         - label: Standalone
         - label: Server
   - type: textarea
     id: config
     attributes:
-      label: Foot config
-      description: Paste your entire `foot.ini` here (do not forget to sanitize it!)
+      label: Ankle config
+      description: Paste your entire `ankle.ini` (or `foot.ini`, if you use that) here (do not forget to sanitize it!)
       render: ini
     validations:
       required: true
@@ -95,7 +95,7 @@ body:
 
         **Terminal multiplexers**: are you using tmux, zellij, or any
         other terminal multiplexer?  Does the bug happen in a plain
-        foot instance?
+        ankle instance?
 
         **IME** do you use an IME (e.g. fcitx5, ibus etc)? Which one?
         Does the bug happen if you disable the IME?
@@ -104,21 +104,21 @@ body:
         ------------------------------
 
         Use a [debug
-        build](https://codeberg.org/dnkl/foot/src/branch/master/INSTALL.md#debug-build)
-        of foot if possible, to get a better quality stacktrace in
+        build](https://github.com/DaGhostman/ankle/blob/master/INSTALL.md#debug-build)
+        of ankle if possible, to get a better quality stacktrace in
         case of a crash.
 
-        Run foot with logging enabled:
+        Run ankle with logging enabled:
         ```sh
-        foot -d info 2> foot.log
+        ankle -d info 2> ankle.log
         ```
 
         In many cases, tracing the Wayland communication is extremely helpful:
         ```sh
-        WAYLAND_DEBUG=1 foot -d info 2> foot.wayland.log
+        WAYLAND_DEBUG=1 ankle -d info 2> ankle.wayland.log
         ```
 
-        Reproduce your problem as quickly as possible, and then exit foot.
+        Reproduce your problem as quickly as possible, and then exit ankle.
   - type: textarea
     id: logs
     attributes:

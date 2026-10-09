@@ -1,6 +1,13 @@
 # Changelog
 
-* [Unreleased](#unreleased)
+Ankle is a fork of [foot](https://codeberg.org/dnkl/foot). Ankle's own
+changes are listed under [Ankle](#ankle-unreleased); everything below
+it is **foot's** changelog, up to the foot version ankle is based on
+(foot's _Unreleased_ section describes foot's `master` at the time of
+the fork).
+
+* [Ankle (unreleased)](#ankle-unreleased)
+* [foot: Unreleased](#unreleased)
 * [1.28.0](#1-28-0)
 * [1.27.0](#1-27-0)
 * [1.26.1](#1-26-1)
@@ -69,6 +76,64 @@
 * [1.2.2](#1-2-2)
 * [1.2.1](#1-2-1)
 * [1.2.0](#1-2-0)
+
+
+## Ankle (unreleased)
+
+Based on foot 1.28.0 (foot `master`, commit `cb277178`).
+
+### Added
+
+* Ligature support: runs of text are shaped together, allowing fonts
+  to render ligatures and contextual alternates (e.g. Monaspace's
+  texture healing). Controlled with the new `ligatures` option
+  (`yes`, `no` or `except-cursor`; enabled by default), and private
+  mode `767371` (with `DECRQM`, `XTSAVE` and `XTRESTORE` support).
+* `font-features`, `font-features-bold`, `font-features-italic` and
+  `font-features-bold-italic` options, for enabling (or disabling)
+  OpenType features.
+* `--list-font-features[=FONT]` command line option, listing the
+  OpenType features a font supports.
+* Configuration reloading. The configuration, and all files it
+  includes, are watched for changes (`auto-reload-config`, enabled by
+  default), and can also be reloaded with the new `config-reload` key
+  binding. Works in server mode too. A configuration with errors is
+  not applied; a desktop notification describes the error instead.
+* `opaque-fullscreen` option.
+
+### Changed
+
+* Renamed from foot to ankle: the executables are `ankle` and
+  `ankleclient`, and the configuration file is `ankle/ankle.ini`
+  (`foot/foot.ini` is used as a fallback). Desktop files, systemd
+  units, the server socket, man pages and shell completions were
+  renamed accordingly. `TERM` (`foot`), `XTVERSION` and device
+  attribute replies are unchanged, for compatibility.
+* Fullscreen windows keep their background transparency (foot makes
+  them opaque). Set `opaque-fullscreen=yes` for foot's behavior.
+* fcft is always built from the bundled subproject (with patches
+  caching the glyphs of shaped text runs), and statically linked.
+* HarfBuzz is now a required dependency, and meson >= 0.63 is
+  required.
+
+### Fixed
+
+* Heap overflow on a sixel repeat count that wraps around 32 bits
+  ([foot#2372][foot-2372]).
+* Heap overflow on sixel images, after raising the maximum sixel
+  geometry with `CSI ? 2 ; 3 ; W ; H S` ([foot#2343][foot-2343];
+  patch from foot).
+* Quadratic processing time for OSC-99 notifications sent in many
+  chunks ([foot#2365][foot-2365]).
+* Terminal freezing when a frame produces thousands of damage
+  rectangles ([foot#2338][foot-2338]).
+* Out-of-bounds read when the compositor sends an empty keymap (patch
+  from foot).
+
+[foot-2372]: https://codeberg.org/dnkl/foot/issues/2372
+[foot-2343]: https://codeberg.org/dnkl/foot/issues/2343
+[foot-2365]: https://codeberg.org/dnkl/foot/issues/2365
+[foot-2338]: https://codeberg.org/dnkl/foot/issues/2338
 
 
 ## Unreleased
