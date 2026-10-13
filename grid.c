@@ -1688,3 +1688,57 @@ UNITTEST
     grid_row_ranges_destroy(&row_data.uri_ranges, ROW_RANGE_URI);
     free(row_data.uri_ranges.v);
 }
+
+UNITTEST
+{
+    /*
+     * A wide character that doesn't fit the new grid is replaced by a
+     * single, empty, cell. That cell must keep the character's
+     * attributes; previously only 'wc' was written, leaving the
+     * attributes uninitialized (the new row's cells are malloc:ed),
+     * and render_cell() would index the color table with garbage
+     * (https://codeberg.org/dnkl/foot/issues/2466).
+     */
+    const struct attributes attrs = {
+        .fg_src = COLOR_BASE256, .fg = 3,
+        .bg_src = COLOR_BASE256, .bg = 200,
+    };
+
+    struct grid grid = {
+        .num_rows = 4,
+        .num_cols = 2,
+        .rows = xcalloc(4, sizeof(grid.rows[0])),
+    };
+
+    for (int r = 0; r < 2; r++)
+        grid.rows[r] = grid_row_alloc(grid.num_cols, true);
+
+    grid.rows[0]->cells[0] = (struct cell){.wc = U'😀', .attrs = attrs};
+    grid.rows[0]->cells[1] = (struct cell){.wc = CELL_SPACER + 1, .attrs = attrs};
+    grid.cur_row = grid.rows[1];
+
+    struct terminal term = {0};
+    struct coord *no_tracking_points[1] = {NULL};
+    grid_resize_and_reflow(&grid, &term, 4, 1, 2, 2, 0, no_tracking_points);
+
+    bool found = false;
+    for (int r = 0; r < grid.num_rows; r++) {
+        const struct row *row = grid.rows[r];
+        if (row == NULL)
+            continue;
+
+        const struct cell *cell = &row->cells[0];
+        if (cell->attrs.bg_src == COLOR_DEFAULT)
+            continue;
+
+        xassert(cell->wc == 0);
+        xassert(cell->attrs.fg_src == attrs.fg_src);
+        xassert(cell->attrs.fg == attrs.fg);
+        xassert(cell->attrs.bg_src == attrs.bg_src);
+        xassert(cell->attrs.bg == attrs.bg);
+        found = true;
+    }
+    xassert(found);
+
+    grid_free(&grid);
+}
