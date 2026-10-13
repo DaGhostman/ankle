@@ -1,0 +1,747 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: twilligon <git@twilligon.com>
+Date: Wed, 1 Jul 2026 06:55:40 +0000
+Subject: [PATCH 3/3] fcft: render COLRv1 color glyphs with pixman
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-authored-by: Daniel Eklöf <daniel@ekloef.se>
+---
+ fcft.c | 706 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 706 insertions(+)
+
+diff --git a/fcft.c b/fcft.c
+index 75f1c84..509ab6b 100644
+--- a/fcft.c
++++ b/fcft.c
+@@ -18,6 +18,9 @@
+ #include FT_LCD_FILTER_H
+ #include FT_TRUETYPE_TABLES_H
+ #include FT_SYNTHESIS_H
++#include FT_COLOR_H
++#include FT_GLYPH_H
++#include FT_OUTLINE_H
+ #include <fontconfig/fontconfig.h>
+ 
+ #if defined(FCFT_HAVE_HARFBUZZ)
+@@ -1338,6 +1341,706 @@ fcft_clone(const struct fcft_font *_font)
+     return &font->public;
+ }
+ 
++#define COLR_MAX_NESTING_LEVEL 64
++#define COLR_MAX_GRAPH_EDGE_COUNT 2048
++
++static uint16_t
++colr_srgb8_to_linear16(uint8_t v)
++{
++    return (uint16_t)(pow(v / 255.0, 2.2) * 65535.0 + 0.5);
++}
++
++struct colr_affine {
++    double xx, xy, yx, yy, dx, dy;
++};
++
++static struct colr_affine
++colr_affine_mul(struct colr_affine a, struct colr_affine b)
++{
++    return (struct colr_affine){
++        .xx = a.xx * b.xx + a.xy * b.yx,
++        .xy = a.xx * b.xy + a.xy * b.yy,
++        .yx = a.yx * b.xx + a.yy * b.yx,
++        .yy = a.yx * b.xy + a.yy * b.yy,
++        .dx = a.xx * b.dx + a.xy * b.dy + a.dx,
++        .dy = a.yx * b.dx + a.yy * b.dy + a.dy,
++    };
++}
++
++static void
++colr_affine_apply(struct colr_affine m, double x, double y,
++                  double *ox, double *oy)
++{
++    *ox = m.xx * x + m.xy * y + m.dx;
++    *oy = m.yx * x + m.yy * y + m.dy;
++}
++
++static bool
++colr_affine_invert(struct colr_affine m, struct colr_affine *out)
++{
++    double det = m.xx * m.yy - m.xy * m.yx;
++    if (det == 0.)
++        return false;
++    double id = 1. / det;
++    out->xx =  m.yy * id;
++    out->xy = -m.xy * id;
++    out->yx = -m.yx * id;
++    out->yy =  m.xx * id;
++    out->dx = -(out->xx * m.dx + out->xy * m.dy);
++    out->dy = -(out->yx * m.dx + out->yy * m.dy);
++    return true;
++}
++
++static struct colr_affine
++colr_affine_from_ft(FT_Affine23 a)
++{
++    return (struct colr_affine){
++        .xx = a.xx / 65536.0, .xy = a.xy / 65536.0,
++        .yx = a.yx / 65536.0, .yy = a.yy / 65536.0,
++        .dx = a.dx / 65536.0, .dy = a.dy / 65536.0,
++    };
++}
++
++static struct colr_affine
++colr_about_center(double xx, double xy, double yx, double yy,
++                  double cx, double cy)
++{
++    return (struct colr_affine){
++        .xx = xx, .xy = xy, .yx = yx, .yy = yy,
++        .dx = cx - (xx * cx + xy * cy),
++        .dy = cy - (yx * cx + yy * cy),
++    };
++}
++
++static double
++colr_angle_rad(FT_Fixed v)
++{
++    return v / 65536.0 * M_PI;
++}
++
++static pixman_transform_t
++colr_to_pixman_transform(struct colr_affine m)
++{
++    return (pixman_transform_t){ .matrix = {
++        { pixman_double_to_fixed(m.xx), pixman_double_to_fixed(m.xy),
++          pixman_double_to_fixed(m.dx) },
++        { pixman_double_to_fixed(m.yx), pixman_double_to_fixed(m.yy),
++          pixman_double_to_fixed(m.dy) },
++        { 0, 0, pixman_fixed_1 },
++    }};
++}
++
++struct colr_ctx {
++    FT_Face face;
++    pixman_image_t *canvas;
++    pixman_format_code_t fmt;
++    bool linear;
++    int cw, ch;
++    int dev_x0;
++    int dev_y1;
++    FT_Color *palette;
++    int num_palette;
++    int depth, edges;
++    bool ok;
++};
++
++static pixman_image_t *
++colr_new_image(pixman_format_code_t fmt, int w, int h)
++{
++    int stride = stride_for_format_and_width(fmt, w);
++    uint8_t *data = calloc(h, stride);
++    if (data == NULL)
++        return NULL;
++    pixman_image_t *img =
++        pixman_image_create_bits(fmt, w, h, (uint32_t *)data, stride);
++    if (img == NULL) {
++        free(data);
++        return NULL;
++    }
++    return img;
++}
++
++static void
++colr_free_image(pixman_image_t *img)
++{
++    if (img == NULL)
++        return;
++    free(pixman_image_get_data(img));
++    pixman_image_unref(img);
++}
++
++static pixman_color_t
++colr_color(const struct colr_ctx *ctx, FT_ColorIndex ci)
++{
++    double alpha = ci.alpha / 16384.0;
++    if (alpha < 0.) alpha = 0.;
++    if (alpha > 1.) alpha = 1.;
++
++    uint16_t r = 0, g = 0, b = 0;
++    if (ci.palette_index != 0xffff &&
++        ctx->palette != NULL && ci.palette_index < ctx->num_palette)
++    {
++        FT_Color c = ctx->palette[ci.palette_index];
++        alpha *= c.alpha / 255.;
++        if (ctx->linear) {
++            r = colr_srgb8_to_linear16(c.red);
++            g = colr_srgb8_to_linear16(c.green);
++            b = colr_srgb8_to_linear16(c.blue);
++        } else {
++            r = c.red   * 257;
++            g = c.green * 257;
++            b = c.blue  * 257;
++        }
++    }
++
++    uint16_t a = (uint16_t)(alpha * 65535. + 0.5);
++    return (pixman_color_t){ .red = r, .green = g, .blue = b, .alpha = a };
++}
++
++static int
++colr_stop_cmp(const void *a, const void *b)
++{
++    pixman_fixed_t xa = ((const pixman_gradient_stop_t *)a)->x;
++    pixman_fixed_t xb = ((const pixman_gradient_stop_t *)b)->x;
++    return (xa > xb) - (xa < xb);
++}
++
++static pixman_gradient_stop_t *
++colr_stops(struct colr_ctx *ctx, FT_ColorLine *cl, int *out_n,
++           pixman_repeat_t *out_repeat)
++{
++    unsigned cap = cl->color_stop_iterator.num_color_stops;
++    pixman_gradient_stop_t *stops = malloc((cap ? cap : 1) * sizeof(*stops));
++    if (stops == NULL)
++        return NULL;
++
++    int n = 0;
++    FT_ColorStop stop;
++    while (n < (int)cap &&
++           FT_Get_Colorline_Stops(ctx->face, &stop, &cl->color_stop_iterator))
++    {
++        stops[n].x = pixman_double_to_fixed(stop.stop_offset / 65536.0);
++        stops[n].color = colr_color(ctx, stop.color);
++        n++;
++    }
++    qsort(stops, n, sizeof(*stops), colr_stop_cmp);
++
++    switch (cl->extend) {
++    case FT_COLR_PAINT_EXTEND_REPEAT:  *out_repeat = PIXMAN_REPEAT_NORMAL;  break;
++    case FT_COLR_PAINT_EXTEND_REFLECT: *out_repeat = PIXMAN_REPEAT_REFLECT; break;
++    default:                           *out_repeat = PIXMAN_REPEAT_PAD;     break;
++    }
++    *out_n = n;
++    return stops;
++}
++
++static void
++colr_set_source_transform(struct colr_ctx *ctx, pixman_image_t *img,
++                          struct colr_affine ctm)
++{
++    struct colr_affine inv;
++    if (!colr_affine_invert(ctm, &inv))
++        return;
++    struct colr_affine canvas_to_dev = {
++        .xx = 1, .xy = 0, .dx = ctx->dev_x0,
++        .yx = 0, .yy = -1, .dy = ctx->dev_y1,
++    };
++    pixman_transform_t t =
++        colr_to_pixman_transform(colr_affine_mul(inv, canvas_to_dev));
++    pixman_image_set_transform(img, &t);
++}
++
++static struct colr_affine
++colr_transform_affine(const FT_COLR_Paint *p, FT_OpaquePaint *child)
++{
++    switch (p->format) {
++    case FT_COLR_PAINTFORMAT_TRANSFORM:
++        *child = p->u.transform.paint;
++        return colr_affine_from_ft(p->u.transform.affine);
++
++    case FT_COLR_PAINTFORMAT_TRANSLATE:
++        *child = p->u.translate.paint;
++        return (struct colr_affine){
++            .xx = 1, .yy = 1,
++            .dx = p->u.translate.dx / 65536.0,
++            .dy = p->u.translate.dy / 65536.0,
++        };
++
++    case FT_COLR_PAINTFORMAT_SCALE: {
++        *child = p->u.scale.paint;
++        double sx = p->u.scale.scale_x / 65536.0;
++        double sy = p->u.scale.scale_y / 65536.0;
++        double cx = p->u.scale.center_x / 65536.0;
++        double cy = p->u.scale.center_y / 65536.0;
++        return colr_about_center(sx, 0, 0, sy, cx, cy);
++    }
++
++    case FT_COLR_PAINTFORMAT_ROTATE: {
++        *child = p->u.rotate.paint;
++        double th = colr_angle_rad(p->u.rotate.angle);
++        double c = cos(th), s = sin(th);
++        double cx = p->u.rotate.center_x / 65536.0;
++        double cy = p->u.rotate.center_y / 65536.0;
++        return colr_about_center(c, -s, s, c, cx, cy);
++    }
++
++    default: {
++        *child = p->u.skew.paint;
++        double tx = tan(colr_angle_rad(p->u.skew.x_skew_angle));
++        double ty = tan(colr_angle_rad(p->u.skew.y_skew_angle));
++        double cx = p->u.skew.center_x / 65536.0;
++        double cy = p->u.skew.center_y / 65536.0;
++        return colr_about_center(1, -tx, ty, 1, cx, cy);
++    }
++    }
++}
++
++static pixman_image_t *
++colr_solid_stop(pixman_gradient_stop_t *stops, int idx)
++{
++    pixman_image_t *img = pixman_image_create_solid_fill(&stops[idx].color);
++    free(stops);
++    return img;
++}
++
++static pixman_image_t *
++colr_gradient(struct colr_ctx *ctx, FT_COLR_Paint *p, struct colr_affine ctm)
++{
++    FT_ColorLine *colorline =
++        p->format == FT_COLR_PAINTFORMAT_LINEAR_GRADIENT
++            ? &p->u.linear_gradient.colorline
++        : p->format == FT_COLR_PAINTFORMAT_RADIAL_GRADIENT
++            ? &p->u.radial_gradient.colorline
++            : &p->u.sweep_gradient.colorline;
++
++    int n;
++    pixman_repeat_t repeat;
++    pixman_gradient_stop_t *stops = colr_stops(ctx, colorline, &n, &repeat);
++    if (stops == NULL)
++        return NULL;
++    if (n == 0) { free(stops); return NULL; }
++    if (n == 1)
++        return colr_solid_stop(stops, 0);
++
++    pixman_image_t *img = NULL;
++    switch (p->format) {
++    case FT_COLR_PAINTFORMAT_LINEAR_GRADIENT: {
++        FT_PaintLinearGradient *g = &p->u.linear_gradient;
++        double p0x = g->p0.x / 65536.0, p0y = g->p0.y / 65536.0;
++        double p1x = g->p1.x / 65536.0, p1y = g->p1.y / 65536.0;
++        double p2x = g->p2.x / 65536.0, p2y = g->p2.y / 65536.0;
++
++        double dabx = p1x - p0x, daby = p1y - p0y;
++        double dacx = p2x - p0x, dacy = p2y - p0y;
++        double dd = dacx * dacx + dacy * dacy;
++        double endx = p1x, endy = p1y;
++        if (dd != 0.) {
++            double k = (dabx * dacx + daby * dacy) / dd;
++            endx = p1x - k * dacx;
++            endy = p1y - k * dacy;
++        }
++        if (endx == p0x && endy == p0y)
++            return colr_solid_stop(stops, n - 1);
++
++        pixman_point_fixed_t pp0 = { pixman_double_to_fixed(p0x),
++                                     pixman_double_to_fixed(p0y) };
++        pixman_point_fixed_t pp1 = { pixman_double_to_fixed(endx),
++                                     pixman_double_to_fixed(endy) };
++        img = pixman_image_create_linear_gradient(&pp0, &pp1, stops, n);
++        break;
++    }
++
++    case FT_COLR_PAINTFORMAT_RADIAL_GRADIENT: {
++        FT_PaintRadialGradient *g = &p->u.radial_gradient;
++        pixman_point_fixed_t c0 = {
++            pixman_double_to_fixed(g->c0.x / 65536.0),
++            pixman_double_to_fixed(g->c0.y / 65536.0) };
++        pixman_point_fixed_t c1 = {
++            pixman_double_to_fixed(g->c1.x / 65536.0),
++            pixman_double_to_fixed(g->c1.y / 65536.0) };
++        pixman_fixed_t r0 = pixman_double_to_fixed(g->r0 / 65536.0);
++        pixman_fixed_t r1 = pixman_double_to_fixed(g->r1 / 65536.0);
++        img = pixman_image_create_radial_gradient(&c0, &c1, r0, r1, stops, n);
++        break;
++    }
++
++    default: {
++        FT_PaintSweepGradient *g = &p->u.sweep_gradient;
++        double start = g->start_angle / 65536.0 * 180.;
++        double end   = g->end_angle   / 65536.0 * 180.;
++        double span  = end - start;
++        for (int i = 0; i < n; i++) {
++            double o = stops[i].x / 65536.;
++            double deg = start + o * span;
++            double frac = (deg + 90.) / 360.;
++            frac -= floor(frac);
++            stops[i].x = pixman_double_to_fixed(frac);
++        }
++        qsort(stops, n, sizeof(*stops), colr_stop_cmp);
++
++        pixman_point_fixed_t center = {
++            pixman_double_to_fixed(g->center.x / 65536.0),
++            pixman_double_to_fixed(g->center.y / 65536.0) };
++        img = pixman_image_create_conical_gradient(&center, 0, stops, n);
++        break;
++    }
++    }
++
++    free(stops);
++    if (img == NULL)
++        return NULL;
++    pixman_image_set_repeat(img, repeat);
++    colr_set_source_transform(ctx, img, ctm);
++    return img;
++}
++
++static pixman_image_t *
++colr_source(struct colr_ctx *ctx, FT_COLR_Paint *p, struct colr_affine ctm)
++{
++    if (p->format == FT_COLR_PAINTFORMAT_SOLID) {
++        pixman_color_t c = colr_color(ctx, p->u.solid.color);
++        return pixman_image_create_solid_fill(&c);
++    }
++    return colr_gradient(ctx, p, ctm);
++}
++
++static pixman_image_t *
++colr_glyph_coverage(struct colr_ctx *ctx, FT_UInt gid, struct colr_affine ctm)
++{
++    if (FT_Load_Glyph(ctx->face, gid,
++                      FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING |
++                      FT_LOAD_NO_BITMAP) != 0)
++        return NULL;
++    if (ctx->face->glyph->format != FT_GLYPH_FORMAT_OUTLINE)
++        return NULL;
++
++    FT_Outline *src = &ctx->face->glyph->outline;
++    FT_Outline outline;
++    if (FT_Outline_New(ft_lib, src->n_points, src->n_contours, &outline) != 0)
++        return NULL;
++    if (FT_Outline_Copy(src, &outline) != 0) {
++        FT_Outline_Done(ft_lib, &outline);
++        return NULL;
++    }
++
++    for (int i = 0; i < outline.n_points; i++) {
++        double dx, dy;
++        colr_affine_apply(ctm, outline.points[i].x, outline.points[i].y,
++                          &dx, &dy);
++        outline.points[i].x = (FT_Pos)llround(dx * 64.);
++        outline.points[i].y = (FT_Pos)llround(dy * 64.);
++    }
++
++    FT_BBox cbox;
++    FT_Outline_Get_CBox(&outline, &cbox);
++    int xmin = (int)floor(cbox.xMin / 64.);
++    int ymin = (int)floor(cbox.yMin / 64.);
++    int xmax = (int)ceil (cbox.xMax / 64.);
++    int ymax = (int)ceil (cbox.yMax / 64.);
++    int w = xmax - xmin;
++    int h = ymax - ymin;
++    if (w <= 0 || h <= 0 ||
++        w > 4 * ctx->cw + 256 || h > 4 * ctx->ch + 256)
++    {
++        FT_Outline_Done(ft_lib, &outline);
++        return NULL;
++    }
++
++    FT_Outline_Translate(&outline, -xmin * 64, -ymin * 64);
++
++    int cov_stride = stride_for_format_and_width(PIXMAN_a8, w);
++    uint8_t *cov = calloc(h, cov_stride);
++    if (cov == NULL) {
++        FT_Outline_Done(ft_lib, &outline);
++        return NULL;
++    }
++    FT_Bitmap bm = {
++        .rows = h, .width = w, .pitch = cov_stride,
++        .buffer = cov, .num_grays = 256, .pixel_mode = FT_PIXEL_MODE_GRAY,
++    };
++    FT_Error err = FT_Outline_Get_Bitmap(ft_lib, &outline, &bm);
++    FT_Outline_Done(ft_lib, &outline);
++    if (err != 0) {
++        free(cov);
++        return NULL;
++    }
++
++    pixman_image_t *cov_img =
++        pixman_image_create_bits(PIXMAN_a8, w, h, (uint32_t *)cov, cov_stride);
++    pixman_image_t *mask = colr_new_image(PIXMAN_a8, ctx->cw, ctx->ch);
++    if (cov_img == NULL || mask == NULL) {
++        if (cov_img != NULL) pixman_image_unref(cov_img);
++        colr_free_image(mask);
++        free(cov);
++        return NULL;
++    }
++
++    int dst_x = xmin - ctx->dev_x0;
++    int dst_y = ctx->dev_y1 - ymax;
++    pixman_image_composite32(PIXMAN_OP_SRC, cov_img, NULL, mask,
++                             0, 0, 0, 0, dst_x, dst_y, w, h);
++    pixman_image_unref(cov_img);
++    free(cov);
++    return mask;
++}
++
++static void
++colr_fill(struct colr_ctx *ctx, pixman_image_t *src, pixman_image_t *clip)
++{
++    pixman_image_composite32(PIXMAN_OP_OVER, src, clip, ctx->canvas,
++                             0, 0, 0, 0, 0, 0, ctx->cw, ctx->ch);
++}
++
++static pixman_op_t
++colr_composite_op(FT_Composite_Mode mode)
++{
++    switch (mode) {
++    case FT_COLR_COMPOSITE_CLEAR:       return PIXMAN_OP_CLEAR;
++    case FT_COLR_COMPOSITE_SRC:         return PIXMAN_OP_SRC;
++    case FT_COLR_COMPOSITE_DEST:        return PIXMAN_OP_DST;
++    case FT_COLR_COMPOSITE_SRC_OVER:    return PIXMAN_OP_OVER;
++    case FT_COLR_COMPOSITE_DEST_OVER:   return PIXMAN_OP_OVER_REVERSE;
++    case FT_COLR_COMPOSITE_SRC_IN:      return PIXMAN_OP_IN;
++    case FT_COLR_COMPOSITE_DEST_IN:     return PIXMAN_OP_IN_REVERSE;
++    case FT_COLR_COMPOSITE_SRC_OUT:     return PIXMAN_OP_OUT;
++    case FT_COLR_COMPOSITE_DEST_OUT:    return PIXMAN_OP_OUT_REVERSE;
++    case FT_COLR_COMPOSITE_SRC_ATOP:    return PIXMAN_OP_ATOP;
++    case FT_COLR_COMPOSITE_DEST_ATOP:   return PIXMAN_OP_ATOP_REVERSE;
++    case FT_COLR_COMPOSITE_XOR:         return PIXMAN_OP_XOR;
++    case FT_COLR_COMPOSITE_PLUS:        return PIXMAN_OP_ADD;
++    case FT_COLR_COMPOSITE_SCREEN:      return PIXMAN_OP_SCREEN;
++    case FT_COLR_COMPOSITE_OVERLAY:     return PIXMAN_OP_OVERLAY;
++    case FT_COLR_COMPOSITE_DARKEN:      return PIXMAN_OP_DARKEN;
++    case FT_COLR_COMPOSITE_LIGHTEN:     return PIXMAN_OP_LIGHTEN;
++    case FT_COLR_COMPOSITE_COLOR_DODGE: return PIXMAN_OP_COLOR_DODGE;
++    case FT_COLR_COMPOSITE_COLOR_BURN:  return PIXMAN_OP_COLOR_BURN;
++    case FT_COLR_COMPOSITE_HARD_LIGHT:  return PIXMAN_OP_HARD_LIGHT;
++    case FT_COLR_COMPOSITE_SOFT_LIGHT:  return PIXMAN_OP_SOFT_LIGHT;
++    case FT_COLR_COMPOSITE_DIFFERENCE:  return PIXMAN_OP_DIFFERENCE;
++    case FT_COLR_COMPOSITE_EXCLUSION:   return PIXMAN_OP_EXCLUSION;
++    case FT_COLR_COMPOSITE_MULTIPLY:    return PIXMAN_OP_MULTIPLY;
++    case FT_COLR_COMPOSITE_HSL_HUE:        return PIXMAN_OP_HSL_HUE;
++    case FT_COLR_COMPOSITE_HSL_SATURATION: return PIXMAN_OP_HSL_SATURATION;
++    case FT_COLR_COMPOSITE_HSL_COLOR:      return PIXMAN_OP_HSL_COLOR;
++    case FT_COLR_COMPOSITE_HSL_LUMINOSITY: return PIXMAN_OP_HSL_LUMINOSITY;
++    default:                            return PIXMAN_OP_OVER;
++    }
++}
++
++static void colr_render_paint(struct colr_ctx *ctx, FT_OpaquePaint op,
++                              struct colr_affine ctm, pixman_image_t *clip);
++
++static void
++colr_composite(struct colr_ctx *ctx, FT_PaintComposite *pc,
++               struct colr_affine ctm, pixman_image_t *clip)
++{
++    pixman_image_t *backdrop = colr_new_image(ctx->fmt, ctx->cw, ctx->ch);
++    pixman_image_t *source   = colr_new_image(ctx->fmt, ctx->cw, ctx->ch);
++    if (backdrop == NULL || source == NULL) {
++        colr_free_image(backdrop);
++        colr_free_image(source);
++        ctx->ok = false;
++        return;
++    }
++
++    pixman_image_t *saved = ctx->canvas;
++    ctx->canvas = backdrop;
++    colr_render_paint(ctx, pc->backdrop_paint, ctm, NULL);
++    ctx->canvas = source;
++    colr_render_paint(ctx, pc->source_paint, ctm, NULL);
++    ctx->canvas = saved;
++
++    pixman_image_composite32(colr_composite_op(pc->composite_mode),
++                             source, NULL, backdrop,
++                             0, 0, 0, 0, 0, 0, ctx->cw, ctx->ch);
++    colr_fill(ctx, backdrop, clip);
++
++    colr_free_image(backdrop);
++    colr_free_image(source);
++}
++
++static void
++colr_render_paint(struct colr_ctx *ctx, FT_OpaquePaint op,
++                  struct colr_affine ctm, pixman_image_t *clip)
++{
++    if (!ctx->ok || ctx->depth >= COLR_MAX_NESTING_LEVEL ||
++        ctx->edges >= COLR_MAX_GRAPH_EDGE_COUNT)
++        return;
++    ctx->depth++;
++    ctx->edges++;
++
++    FT_COLR_Paint p;
++    if (!FT_Get_Paint(ctx->face, op, &p)) {
++        ctx->depth--;
++        return;
++    }
++
++    switch (p.format) {
++    case FT_COLR_PAINTFORMAT_COLR_LAYERS: {
++        FT_LayerIterator it = p.u.colr_layers.layer_iterator;
++        int count = it.num_layers;
++        FT_OpaquePaint *layers = count > 0
++            ? malloc(count * sizeof(*layers)) : NULL;
++        int k = 0;
++        if (layers != NULL) {
++            FT_OpaquePaint lp;
++            while (k < count && FT_Get_Paint_Layers(ctx->face, &it, &lp))
++                layers[k++] = lp;
++            for (int i = 0; i < k; i++)
++                colr_render_paint(ctx, layers[i], ctm, clip);
++            free(layers);
++        }
++        break;
++    }
++
++    case FT_COLR_PAINTFORMAT_GLYPH: {
++        pixman_image_t *cov =
++            colr_glyph_coverage(ctx, p.u.glyph.glyphID, ctm);
++        if (cov != NULL) {
++            if (clip != NULL)
++                pixman_image_composite32(PIXMAN_OP_IN, clip, NULL, cov,
++                                         0, 0, 0, 0, 0, 0, ctx->cw, ctx->ch);
++            colr_render_paint(ctx, p.u.glyph.paint, ctm, cov);
++            colr_free_image(cov);
++        }
++        break;
++    }
++
++    case FT_COLR_PAINTFORMAT_SOLID:
++    case FT_COLR_PAINTFORMAT_LINEAR_GRADIENT:
++    case FT_COLR_PAINTFORMAT_RADIAL_GRADIENT:
++    case FT_COLR_PAINTFORMAT_SWEEP_GRADIENT: {
++        pixman_image_t *src = colr_source(ctx, &p, ctm);
++        if (src != NULL) { colr_fill(ctx, src, clip); pixman_image_unref(src); }
++        break;
++    }
++
++    case FT_COLR_PAINTFORMAT_TRANSFORM:
++    case FT_COLR_PAINTFORMAT_TRANSLATE:
++    case FT_COLR_PAINTFORMAT_SCALE:
++    case FT_COLR_PAINTFORMAT_ROTATE:
++    case FT_COLR_PAINTFORMAT_SKEW: {
++        FT_OpaquePaint child;
++        struct colr_affine a = colr_transform_affine(&p, &child);
++        colr_render_paint(ctx, child, colr_affine_mul(ctm, a), clip);
++        break;
++    }
++
++    case FT_COLR_PAINTFORMAT_COMPOSITE:
++        colr_composite(ctx, &p.u.composite, ctm, clip);
++        break;
++
++    case FT_COLR_PAINTFORMAT_COLR_GLYPH: {
++        FT_OpaquePaint root = { .p = NULL };
++        if (FT_Get_Color_Glyph_Paint(ctx->face, p.u.colr_glyph.glyphID,
++                                     FT_COLOR_NO_ROOT_TRANSFORM, &root))
++            colr_render_paint(ctx, root, ctm, clip);
++        break;
++    }
++
++    default:
++        break;
++    }
++
++    ctx->depth--;
++}
++
++static bool
++colr_rasterize(const struct instance *inst, uint32_t base_glyph,
++               enum fcft_subpixel subpixel,
++               const struct fcft_font_options *options,
++               struct glyph_priv *glyph)
++{
++    FT_Face face = inst->face;
++
++    FT_OpaquePaint top = { .p = NULL };
++    if (!FT_Get_Color_Glyph_Paint(face, base_glyph,
++                                  FT_COLOR_NO_ROOT_TRANSFORM, &top))
++        return false;
++
++    double sx = face->size->metrics.x_scale / 65536. / 64.;
++    double sy = face->size->metrics.y_scale / 65536. / 64.;
++    struct colr_affine root = { .xx = sx, .yy = sy };
++
++    double xmn, ymn, xmx, ymx;
++    FT_ClipBox cb;
++    if (FT_Get_Color_Glyph_ClipBox(face, base_glyph, &cb)) {
++        long cx[4] = { cb.bottom_left.x, cb.top_left.x,
++                       cb.top_right.x, cb.bottom_right.x };
++        long cy[4] = { cb.bottom_left.y, cb.top_left.y,
++                       cb.top_right.y, cb.bottom_right.y };
++        long lxmn = cx[0], lxmx = cx[0], lymn = cy[0], lymx = cy[0];
++        for (int i = 1; i < 4; i++) {
++            lxmn = min(lxmn, cx[i]); lxmx = max(lxmx, cx[i]);
++            lymn = min(lymn, cy[i]); lymx = max(lymx, cy[i]);
++        }
++        xmn = lxmn / 64.; xmx = lxmx / 64.;
++        ymn = lymn / 64.; ymx = lymx / 64.;
++    } else {
++        xmn = face->bbox.xMin * sx; xmx = face->bbox.xMax * sx;
++        ymn = face->bbox.yMin * sy; ymx = face->bbox.yMax * sy;
++    }
++
++    int xmin = (int)floor(xmn), ymin = (int)floor(ymn);
++    int xmax = (int)ceil(xmx),  ymax = (int)ceil(ymx);
++    int cw = xmax - xmin;
++    int ch = ymax - ymin;
++    if (cw <= 0 || ch <= 0 || cw > 4096 || ch > 4096)
++        return false;
++
++    bool linear = options->color_glyphs.srgb_decode;
++    pixman_format_code_t fmt = options->color_glyphs.format;
++
++    pixman_image_t *canvas = colr_new_image(fmt, cw, ch);
++    if (canvas == NULL)
++        return false;
++
++    FT_Color *palette = NULL;
++    FT_Palette_Select(face, 0, &palette);
++    FT_Palette_Data pdata;
++    int num_palette = 0;
++    if (FT_Palette_Data_Get(face, &pdata) == 0)
++        num_palette = pdata.num_palette_entries;
++
++    struct colr_ctx ctx = {
++        .face = face,
++        .canvas = canvas, .fmt = fmt, .linear = linear, .cw = cw, .ch = ch,
++        .dev_x0 = xmin, .dev_y1 = ymax,
++        .palette = palette, .num_palette = num_palette,
++        .depth = 0, .edges = 0, .ok = true,
++    };
++
++    colr_render_paint(&ctx, top, root, NULL);
++
++    if (!ctx.ok) {
++        colr_free_image(canvas);
++        return false;
++    }
++
++    int adv_x = 0, adv_y = 0;
++    if (FT_Load_Glyph(face, base_glyph, inst->load_flags) == 0) {
++        adv_x = (int)roundf(face->glyph->advance.x / 64.);
++        adv_y = (int)roundf(face->glyph->advance.y / 64.);
++    }
++
++    *glyph = (struct glyph_priv){
++        .valid = true,
++        .subpixel = subpixel,
++        .public = {
++            .font_name = inst->name,
++            .pix = canvas,
++            .x = xmin,
++            .y = ymax,
++            .width = cw,
++            .height = ch,
++            .advance = { .x = adv_x, .y = adv_y },
++            .is_color_glyph = true,
++        },
++    };
++    return true;
++}
++
++
+ static bool
+ glyph_for_index(const struct instance *inst, uint32_t index,
+                 enum fcft_subpixel subpixel,
+@@ -1351,6 +2054,9 @@ glyph_for_index(const struct instance *inst, uint32_t index,
+     uint8_t *data = NULL;
+ 
+     FT_Error err;
++    if (colr_rasterize(inst, index, subpixel, options, glyph))
++        return true;
++
+     if ((err = FT_Load_Glyph(inst->face, index, inst->load_flags)) != FT_Err_Ok) {
+         LOG_ERR("%s: failed to load glyph #%d: %s",
+                 inst->path, index, ft_error_string(err));
+-- 
+2.56.0
+

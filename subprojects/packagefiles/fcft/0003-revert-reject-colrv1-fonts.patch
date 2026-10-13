@@ -1,0 +1,137 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: twilligon <git@twilligon.com>
+Date: Wed, 1 Jul 2026 06:55:13 +0000
+Subject: [PATCH 2/3] Revert "fcft: reject COLRv1 fonts"
+
+This reverts commit e600f6bb87aab8bd0aa28da2931b22e4ef9844d4.
+---
+ fcft.c | 70 ++++++++--------------------------------------------------
+ 1 file changed, 9 insertions(+), 61 deletions(-)
+
+diff --git a/fcft.c b/fcft.c
+index 48b3f37..75f1c84 100644
+--- a/fcft.c
++++ b/fcft.c
+@@ -1,13 +1,12 @@
+ #include "fcft/fcft.h"
+ 
+-#include <assert.h>
+-#include <byteswap.h>
+-#include <locale.h>
+-#include <math.h>
+-#include <stdbool.h>
+-#include <stdint.h>
+ #include <stdlib.h>
++#include <stdint.h>
++#include <stdbool.h>
++#include <math.h>
++#include <assert.h>
+ #include <threads.h>
++#include <locale.h>
+ 
+ #include <wchar.h>  /* TODO: remove */
+ 
+@@ -19,7 +18,6 @@
+ #include FT_LCD_FILTER_H
+ #include FT_TRUETYPE_TABLES_H
+ #include FT_SYNTHESIS_H
+-#include FT_TRUETYPE_TAGS_H
+ #include <fontconfig/fontconfig.h>
+ 
+ #if defined(FCFT_HAVE_HARFBUZZ)
+@@ -599,7 +597,7 @@ pattern_from_font_set(FcPattern *base_pattern, FcFontSet *set, size_t idx)
+ 
+ static bool
+ instantiate_pattern(FcPattern *pattern, double req_pt_size, double req_px_size,
+-                    struct instance *font, bool is_primary)
++                    struct instance *font)
+ {
+     FcChar8 *face_file = NULL;
+     if (FcPatternGetString(pattern, FC_FT_FACE, 0, &face_file) != FcResultMatch &&
+@@ -657,56 +655,6 @@ instantiate_pattern(FcPattern *pattern, double req_pt_size, double req_px_size,
+         goto err_done_face;
+     }
+ 
+-    do {
+-        /*
+-         * Detect (and reject) COLRv1 fonts by reading the COLR table
+-         * and checking the version field.
+-         *
+-         * // Big-endian
+-         * struct COLRHeaderV0 {
+-         *     uint16_t version;
+-         *     uint16_t numBaseGlyphRecords;
+-         *     uint32_t baseGlyphRecordsOffset;
+-         *     uint32_t layerRecordsOffset;
+-         * };
+-         *
+-         * struct COLRHeaderV1 {
+-         *     struct COLRHeaderV0 v0;
+-         *     uint32_t clipListOffset;
+-         *     uint32_t varIndexMapOffset;
+-         *     uint32_t itemVariationStoreOffset;
+-         * };
+-         */
+-
+-        uint16_t version;
+-        FT_ULong length = sizeof(version);
+-
+-        if ((ft_err = FT_Load_Sfnt_Table(ft_face, TTAG_COLR, 0, (FT_Byte *)&version, &length)) != FT_Err_Ok) {
+-            /* Stay silent, and assume we failed simply because the table doesn't exist */
+-            //LOG_ERR("%s: failed to load COLR table: %s", face_file, FT_Error_String(ft_err));
+-            break;
+-        }
+-
+-        if (length < sizeof(version)) {
+-            LOG_ERR("%s: failed to read version field from the COLR table", face_file);
+-            goto err_done_face;
+-        }
+-
+-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+-        version = bswap_16(version);
+-#endif
+-
+-        LOG_DBG("%s: COLR: version=%d", face_file, version);
+-
+-        if (version >= 1) {
+-            if (is_primary)
+-                LOG_ERR("%s: COLRv1 not supported", face_file);
+-            else
+-                LOG_WARN("%s: skipping, COLRv1 not supported", face_file);
+-            goto err_done_face;
+-        }
+-    } while (0);
+-
+     FcBool scalable;
+     if (FcPatternGetBool(pattern, FC_SCALABLE, 0, &scalable) != FcResultMatch)
+         scalable = FcTrue;
+@@ -1239,7 +1187,7 @@ fcft_from_name2(
+ 
+             struct instance *primary = malloc(sizeof(*primary));
+             if (primary == NULL ||
+-                !instantiate_pattern(pattern, req_pt_size, req_px_size, primary, true))
++                !instantiate_pattern(pattern, req_pt_size, req_px_size, primary))
+             {
+                 ;
+             } else
+@@ -2122,7 +2070,7 @@ search_fonts:
+             if (!instantiate_pattern(
+                     it->item.pattern,
+                     it->item.req_pt_size, it->item.req_px_size,
+-                    inst, false))
++                    inst))
+             {
+                 /* Remove, so that we don't have to keep trying to
+                  * instantiate it */
+@@ -2533,7 +2481,7 @@ font_for_grapheme(struct font_priv *font,
+                 if (!instantiate_pattern(
+                         it->item.pattern,
+                         it->item.req_pt_size, it->item.req_px_size,
+-                        *inst, false))
++                        *inst))
+                 {
+                     /* Remove, so that we don't have to keep trying to
+                      * instantiate it */
+-- 
+2.56.0
+
