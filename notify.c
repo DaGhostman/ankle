@@ -40,6 +40,11 @@ notify_free(struct terminal *term, struct notification *notif)
 
     tll_free_and_free(notif->actions, free);
 
+    if (notif->pending != NULL) {
+        notify_free(term, notif->pending);
+        free(notif->pending);
+    }
+
     if (notif->icon_path != NULL) {
         unlink(notif->icon_path);
         free(notif->icon_path);
@@ -182,10 +187,25 @@ consume_stdout(struct notification *notif, bool eof)
     notif->stdout_sz = left;
 }
 
+static void
+send_pending(struct terminal *term, struct notification *notif)
+{
+    struct notification *pending = notif->pending;
+    if (pending == NULL)
+        return;
+
+    notif->pending = NULL;
+
+    /* notify_notify() takes ownership of what it needs; free the rest */
+    notify_notify(term, pending);
+    notify_free(term, pending);
+    free(pending);
+}
+
 static bool
 fdm_notify_stdout(struct fdm *fdm, int fd, int events, void *data)
 {
-    const struct terminal *term = data;
+    struct terminal *term = data;
     struct notification *notif = NULL;
 
     /* Find notification */
@@ -219,6 +239,9 @@ fdm_notify_stdout(struct fdm *fdm, int fd, int events, void *data)
 
             notif->stdout_sz += count;
             consume_stdout(notif, false);
+
+            if (notif->external_id != 0)
+                send_pending(term, notif);
         }
     }
 
@@ -227,6 +250,9 @@ fdm_notify_stdout(struct fdm *fdm, int fd, int events, void *data)
         if (notif != NULL) {
             notif->stdout_fd = -1;
             consume_stdout(notif, true);
+
+            /* No more output; don't wait for an ID that won't come */
+            send_pending(term, notif);
         }
     }
 
@@ -307,8 +333,18 @@ notif_done(struct reaper *reaper, pid_t pid, int status, void *data)
             term_to_slave(term, reply, n);
         }
 
+        struct notification *pending = notif->pending;
+        notif->pending = NULL;
+
         notify_free(term, notif);
         tll_remove(term->active_notifications, it);
+
+        if (pending != NULL) {
+            /* The notification is gone; show the update as a new one */
+            notify_notify(term, pending);
+            notify_free(term, pending);
+            free(pending);
+        }
         return;
     }
 }
@@ -338,6 +374,62 @@ expand_action_to_argv(struct terminal *term, const char *name, const char *label
     return true;
 }
 
+static bool
+command_can_replace(const struct terminal *term)
+{
+    char **args = term->conf->desktop_notifications.command.argv.args;
+    for (size_t i = 0; args != NULL && args[i] != NULL; i++) {
+        if (strstr(args[i], "${replace-id}") != NULL)
+            return true;
+    }
+    return false;
+}
+
+/*
+ * If a notification with the same ID is still waiting for its daemon
+ * assigned ID, we can't replace it yet. Queue this one, and send it
+ * once the ID is known; otherwise, both would be shown.
+ */
+static bool
+queue_if_waiting_for_id(struct terminal *term, struct notification *notif)
+{
+    if (notif->id == NULL || !command_can_replace(term))
+        return false;
+
+    struct notification *waiting = NULL;
+    tll_foreach(term->active_notifications, it) {
+        struct notification *existing = &it->item;
+
+        if (existing->id == NULL || !streq(existing->id, notif->id))
+            continue;
+
+        if (existing->external_id == 0 &&
+            existing->pid > 0 && existing->stdout_fd >= 0)
+        {
+            waiting = existing;
+        }
+    }
+
+    if (waiting == NULL)
+        return false;
+
+    LOG_DBG("notification %s: no daemon assigned ID yet, queuing update",
+            notif->id);
+
+    if (waiting->pending != NULL) {
+        /* Only the latest update matters */
+        notify_free(term, waiting->pending);
+        free(waiting->pending);
+    }
+
+    /* Take over ownership of everything; the caller's notify_free()
+       becomes a no-op */
+    waiting->pending = xmalloc(sizeof(*waiting->pending));
+    *waiting->pending = *notif;
+    memset(notif, 0, sizeof(*notif));
+    return true;
+}
+
 bool
 notify_notify(struct terminal *term, struct notification *notif)
 {
@@ -348,6 +440,10 @@ notify_notify(struct terminal *term, struct notification *notif)
     xassert(notif->stdout_data == NULL);
     xassert(notif->icon_path == NULL);
     xassert(notif->icon_fd <= 0);
+    xassert(notif->pending == NULL);
+
+    if (queue_if_waiting_for_id(term, notif))
+        return true;
 
     notif->pid = -1;
     notif->stdout_fd = -1;
@@ -636,9 +732,16 @@ notify_close(struct terminal *term, const char *id)
     LOG_DBG("close notification %s", id);
 
     tll_foreach(term->active_notifications, it) {
-        const struct notification *notif = &it->item;
+        struct notification *notif = &it->item;
         if (notif->id == NULL || !streq(notif->id, id))
             continue;
+
+        if (notif->pending != NULL) {
+            /* Closed before the update was sent; drop it */
+            notify_free(term, notif->pending);
+            free(notif->pending);
+            notif->pending = NULL;
+        }
 
         if (term->conf->desktop_notifications.close.argv.args == NULL) {
             LOG_DBG(

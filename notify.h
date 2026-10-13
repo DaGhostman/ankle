@@ -76,6 +76,11 @@ struct notification {
        bypassing the icon cache */
     char *icon_path;
     int icon_fd;
+
+    /* Update to this notification, received before the daemon
+       assigned it an ID. Sent when the ID arrives (or the helper
+       exits), so that it replaces this notification */
+    struct notification *pending;
 };
 
 struct notification_icon {
