@@ -1307,6 +1307,44 @@ selection_update(struct terminal *term, int col, int row)
     selection_modify(term, new_start, new_end);
 }
 
+/*
+ * Sets the selection to start-end (absolute row numbers, with start
+ * before end), replacing the current selection. Unlike the mouse
+ * driven functions above, there's no pivot point, and no expansion to
+ * word or line boundaries; the caller has already done that. Used by
+ * vi mode.
+ */
+void
+selection_set(struct terminal *term, enum selection_kind kind,
+              struct coord start, struct coord end)
+{
+    xassert(kind == SELECTION_CHAR_WISE ||
+            kind == SELECTION_LINE_WISE ||
+            kind == SELECTION_BLOCK);
+
+    const int mask = term->grid->num_rows - 1;
+    start.row &= mask;
+    end.row &= mask;
+
+    /* The selected region is calculated differently for block
+     * selections; start over if the kind changes */
+    if (term->selection.coords.start.row >= 0 && term->selection.kind != kind)
+        selection_cancel(term);
+
+    if (term->selection.coords.start.row < 0) {
+        term->selection.coords.start = start;
+        term->selection.coords.end = (struct coord){-1, -1};
+    }
+
+    term->selection.kind = kind;
+    term->selection.ongoing = false;
+    term->selection.direction = SELECTION_RIGHT;
+    term->selection.pivot.start = start;
+    term->selection.pivot.end = end;
+
+    selection_modify(term, start, end);
+}
+
 void
 selection_dirty_cells(struct terminal *term)
 {

@@ -272,6 +272,8 @@ struct config {
 
     float dim_unfocused;  /* 0.0 (disabled) - 1.0 */
 
+    bool vi_mode;  /* Allow entering vi mode */
+
     struct {
         bool enabled;
         bool palette_based;
@@ -407,6 +409,9 @@ struct config {
 
         /* While showing URL jump labels */
         struct config_key_binding_list url;
+
+        /* While in vi mode */
+        struct config_key_binding_list vi;
     } bindings;
 
     struct {

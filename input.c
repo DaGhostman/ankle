@@ -40,6 +40,7 @@
 #include "unicode-mode.h"
 #include "url-mode.h"
 #include "util.h"
+#include "vimode.h"
 #include "vt.h"
 #include "xkbcommon-vmod.h"
 #include "xmalloc.h"
@@ -534,6 +535,13 @@ execute_binding(struct seat *seat, struct terminal *term,
 
         term_erase_scrollback(term);
         render_refresh(term);
+        return true;
+
+    case BIND_ACTION_VI_MODE_START:
+        if (!term->conf->vi_mode)
+            return false;
+
+        vimode_begin(term);
         return true;
 
     case BIND_ACTION_CLEAR_TO_PROMPT:
@@ -1710,6 +1718,18 @@ key_press_release(struct seat *seat, struct terminal *term, uint32_t serial,
                 start_repeater(seat, key);
 
             urls_input(
+                seat, term, bindings, key, sym, mods, consumed,
+                raw_syms, raw_count, serial);
+        }
+        return;
+    }
+
+    else if (term->vimode.active) {
+        if (pressed) {
+            if (should_repeat)
+                start_repeater(seat, key);
+
+            vimode_input(
                 seat, term, bindings, key, sym, mods, consumed,
                 raw_syms, raw_count, serial);
         }

@@ -572,6 +572,7 @@ test_section_main(void)
     test_boolean(&ctx, &parse_section_main, "box-drawings-uses-font-glyphs", &conf.box_drawings_uses_font_glyphs);
     test_boolean(&ctx, &parse_section_main, "opaque-fullscreen", &conf.opaque_fullscreen);
     test_boolean(&ctx, &parse_section_main, "selection-clear-on-copy", &conf.selection_clear_on_copy);
+    test_boolean(&ctx, &parse_section_main, "vi-mode", &conf.vi_mode);
     test_unit_float(&ctx, &parse_section_main, "dim-unfocused", &conf.dim_unfocused);
     test_boolean(&ctx, &parse_section_main, "ligatures", &conf.ligatures.enabled);
     {
@@ -1616,6 +1617,109 @@ test_section_url_bindings_collisions(void)
 }
 
 static void
+test_section_vi_bindings(void)
+{
+    struct config conf = {0};
+    struct context ctx = {
+        .conf = &conf, .section = "vi-bindings", .path = "unittest"};
+
+    test_invalid_key(&ctx, &parse_section_vi_bindings, "invalid-key");
+
+    for (int action = 0; action < BIND_ACTION_VI_COUNT; action++) {
+        if (vi_binding_action_map[action] == NULL)
+            continue;
+
+        test_key_binding(
+            &ctx, &parse_section_vi_bindings,
+            action, BIND_ACTION_VI_COUNT - 1,
+            vi_binding_action_map, &conf.bindings.vi, KEY_BINDING,
+            false, false);
+    }
+
+    config_free(&conf);
+}
+
+static void
+test_section_vi_bindings_collisions(void)
+{
+    struct config conf = {0};
+    struct context ctx = {
+        .conf = &conf, .section = "vi-bindings", .path = "unittest"};
+
+    test_binding_collisions(
+        &ctx,
+        BIND_ACTION_VI_COUNT - 1, vi_binding_action_map, KEY_BINDING);
+
+    config_free(&conf);
+}
+
+static bool
+has_vi_mode_start_binding(const struct config *conf)
+{
+    for (size_t i = 0; i < conf->bindings.key.count; i++) {
+        if (conf->bindings.key.arr[i].action == BIND_ACTION_VI_MODE_START)
+            return true;
+    }
+    return false;
+}
+
+static void
+test_vi_mode_start_default_binding(void)
+{
+    /* No default binding unless vi mode is enabled */
+    struct config conf = {0};
+    add_default_key_bindings(&conf);
+    add_default_vi_mode_start_binding(&conf);
+    xassert(!has_vi_mode_start_binding(&conf));
+
+    /* Enabled: Control+Shift+space */
+    conf.vi_mode = true;
+    add_default_vi_mode_start_binding(&conf);
+    xassert(has_vi_mode_start_binding(&conf));
+    const struct config_key_binding *b =
+        &conf.bindings.key.arr[conf.bindings.key.count - 1];
+    xassert(b->action == BIND_ACTION_VI_MODE_START);
+    xassert(b->k.sym == XKB_KEY_space);
+    xassert(tll_length(b->modifiers) == 2);
+
+    /* Idempotent (overrides are applied more than once in server mode) */
+    const size_t count = conf.bindings.key.count;
+    add_default_vi_mode_start_binding(&conf);
+    xassert(conf.bindings.key.count == count);
+    xassert(resolve_key_binding_collisions(
+                &conf, "key-bindings", binding_action_map,
+                &conf.bindings.key, KEY_BINDING));
+    config_free(&conf);
+
+    /* The user bound Control+Shift+space to something else: no
+     * default binding, and no collision */
+    memset(&conf, 0, sizeof(conf));
+    conf.vi_mode = true;
+    struct context ctx = {
+        .conf = &conf, .section = "key-bindings", .path = "unittest"};
+    ctx.key = "quit";
+    ctx.value = "Control+Shift+space";
+    xassert(parse_section_key_bindings(&ctx));
+    add_default_vi_mode_start_binding(&conf);
+    xassert(!has_vi_mode_start_binding(&conf));
+    xassert(resolve_key_binding_collisions(
+                &conf, "key-bindings", binding_action_map,
+                &conf.bindings.key, KEY_BINDING));
+    config_free(&conf);
+
+    /* The user bound vi-mode-start: no additional default */
+    memset(&conf, 0, sizeof(conf));
+    conf.vi_mode = true;
+    ctx.conf = &conf;
+    ctx.key = "vi-mode-start";
+    ctx.value = "Control+Alt+v";
+    xassert(parse_section_key_bindings(&ctx));
+    add_default_vi_mode_start_binding(&conf);
+    xassert(conf.bindings.key.count == 1);
+    config_free(&conf);
+}
+
+static void
 test_section_mouse_bindings(void)
 {
     struct config conf = {0};
@@ -1831,6 +1935,9 @@ main(int argc, const char *const *argv)
     test_section_search_bindings_collisions();
     test_section_url_bindings();
     test_section_url_bindings_collisions();
+    test_section_vi_bindings();
+    test_section_vi_bindings_collisions();
+    test_vi_mode_start_default_binding();
     test_section_mouse_bindings();
     test_section_mouse_bindings_collisions();
     test_section_text_bindings();

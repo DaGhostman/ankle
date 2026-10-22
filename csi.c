@@ -21,6 +21,7 @@
 #include "sixel.h"
 #include "util.h"
 #include "version.h"
+#include "vimode.h"
 #include "vt.h"
 #include "xmalloc.h"
 #include "xsnprintf.h"
@@ -499,6 +500,7 @@ decset_decrst(struct terminal *term, unsigned param, bool enable)
     case 1047:
     case 1049:
         if (enable && term->grid != &term->alt) {
+            vimode_cancel(term);
             selection_cancel(term);
 
             if (param == 1049)
@@ -517,6 +519,7 @@ decset_decrst(struct terminal *term, unsigned param, bool enable)
         }
 
         else if (!enable && term->grid == &term->alt) {
+            vimode_cancel(term);
             selection_cancel(term);
 
             term->grid = &term->normal;

@@ -336,6 +336,26 @@ These shortcuts affect scrolling in scrollback-search mode:
 *shift*+*page-down*
 	Scroll down/forward one page in history.
 
+## VI MODE
+
+Disabled by default; see *vi-mode* and *vi-bindings* in *ankle.ini*(5).
+
+*ctrl*+*shift*+*space*
+	Enter vi mode (when enabled).
+
+*h*, *j*, *k*, *l*, *w*, *b*, *e*, *0*, *^*, *$*, *g*, *G*, ...
+	Move the cursor, with vi-like motions. Prefix with a count to
+	repeat, e.g. *5j*.
+
+*v*, *V*, *ctrl*+*v*
+	Start a character-wise, line-wise or block selection.
+
+*y*
+	Copy the selection to the clipboard.
+
+*escape*, *q*
+	Leave visual mode, and vi mode.
+
 ## URL MODE
 
 *t*

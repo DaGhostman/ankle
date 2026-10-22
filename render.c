@@ -44,6 +44,7 @@
 #include "sixel.h"
 #include "srgb.h"
 #include "url-mode.h"
+#include "vimode.h"
 #include "util.h"
 #include "xmalloc.h"
 
@@ -2546,6 +2547,27 @@ render_overlay(struct terminal *term)
     term->render.last_overlay_style = style;
 }
 
+/*
+ * View-relative position of the cursor to render, or {-1, -1} if no
+ * cursor is rendered. In vi mode, that's the vi mode cursor, instead
+ * of the terminal's cursor.
+ */
+static struct coord
+cursor_in_view(const struct terminal *term)
+{
+    if (unlikely(term->vimode.active))
+        return vimode_cursor_in_view(term);
+
+    if (term->hide_cursor)
+        return (struct coord){-1, -1};
+
+    struct coord cursor = term->grid->cursor.point;
+    cursor.row += term->grid->offset;
+    cursor.row -= term->grid->view;
+    cursor.row &= term->grid->num_rows - 1;
+    return cursor;
+}
+
 int
 render_worker_thread(void *_ctx)
 {
@@ -2575,14 +2597,8 @@ render_worker_thread(void *_ctx)
 
         bool frame_done = false;
 
-        /* Translate offset-relative cursor row to view-relative */
-        struct coord cursor = {-1, -1};
-        if (!term->hide_cursor) {
-            cursor = term->grid->cursor.point;
-            cursor.row += term->grid->offset;
-            cursor.row -= term->grid->view;
-            cursor.row &= term->grid->num_rows - 1;
-        }
+        /* View-relative cursor position */
+        const struct coord cursor = cursor_in_view(term);
 
         while (!frame_done) {
             mtx_lock(lock);
@@ -3668,21 +3684,40 @@ dirty_old_cursor(struct terminal *term)
     }
 
     /* Remember current cursor position, for the next frame */
-    term->render.last_cursor.row = grid_row(term->grid, term->grid->cursor.point.row);
-    term->render.last_cursor.col = term->grid->cursor.point.col;
-    term->render.last_cursor.hidden = term->hide_cursor;
+    const struct coord vi = vimode_cursor_in_view(term);
+    if (unlikely(vi.row >= 0)) {
+        term->render.last_cursor.row = grid_row_in_view(term->grid, vi.row);
+        term->render.last_cursor.col = vi.col;
+        term->render.last_cursor.hidden = false;
+    } else {
+        term->render.last_cursor.row = grid_row(term->grid, term->grid->cursor.point.row);
+        term->render.last_cursor.col = term->grid->cursor.point.col;
+        term->render.last_cursor.hidden = term->hide_cursor || term->vimode.active;
+    }
 }
 
 static void
 dirty_cursor(struct terminal *term)
 {
-    if (term->hide_cursor)
-        return;
+    struct row *row;
+    struct cell *cell;
 
-    const struct coord *cursor = &term->grid->cursor.point;
+    if (unlikely(term->vimode.active)) {
+        const struct coord vi = vimode_cursor_in_view(term);
+        if (vi.row < 0)
+            return;
 
-    struct row *row = grid_row(term->grid, cursor->row);
-    struct cell *cell = &row->cells[cursor->col];
+        row = grid_row_in_view(term->grid, vi.row);
+        cell = &row->cells[vi.col];
+    } else {
+        if (term->hide_cursor)
+            return;
+
+        const struct coord *cursor = &term->grid->cursor.point;
+        row = grid_row(term->grid, cursor->row);
+        cell = &row->cells[cursor->col];
+    }
+
     cell->attrs.clean = 0;
     row->dirty = true;
 }
@@ -3813,15 +3848,8 @@ grid_render(struct terminal *term)
      */
     selection_dirty_cells(term);
 
-    /* Translate offset-relative row to view-relative, unless cursor
-     * is hidden, then we just set it to -1 */
-    struct coord cursor = {-1, -1};
-    if (!term->hide_cursor) {
-        cursor = term->grid->cursor.point;
-        cursor.row += term->grid->offset;
-        cursor.row -= term->grid->view;
-        cursor.row &= term->grid->num_rows - 1;
-    }
+    /* View-relative cursor position, or -1 if hidden */
+    const struct coord cursor = cursor_in_view(term);
 
     if (ligatures_enabled(term)) {
         /*
@@ -5141,6 +5169,9 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
         term->interactive_resizing.new_rows = new_normal_grid_rows;
         goto damage_view;
     }
+
+    /* The grid is about to be resized (and reflowed); drop out of vi mode */
+    vimode_cancel(term);
 
 
     /*

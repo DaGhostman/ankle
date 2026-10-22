@@ -617,6 +617,20 @@ struct terminal {
         } auto_scroll;
     } selection;
 
+    /* vi mode */
+    struct {
+        bool active;
+        enum {
+            VIMODE_VISUAL_NONE,
+            VIMODE_VISUAL_CHAR,
+            VIMODE_VISUAL_LINE,
+            VIMODE_VISUAL_BLOCK,
+        } visual;
+        struct coord cursor;  /* Absolute row */
+        struct coord anchor;  /* Start of visual selection; absolute row */
+        int count;            /* Pending count prefix, 0 if none */
+    } vimode;
+
     bool is_searching;
     struct {
         char32_t *buf;
