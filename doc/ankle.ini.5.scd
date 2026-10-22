@@ -190,6 +190,27 @@ re-applied on top of the reloaded configuration.
 	
 	Default: _0.5_
 
+*font-size-presets*
+	List of font sizes, in _points_, separated by spaces or commas,
+	that the *font-preset-next* and *font-preset-prev* key bindings
+	step through. The size of the primary font decides which preset
+	comes next; all fonts are scaled by the same factor, so their
+	relative sizes are kept.
+	
+	Example:
+	```
+	font-size-presets=9 12 18
+	```
+	
+	Default: _empty_ (the bindings do nothing).
+
+*alpha-adjustment*
+	Amount, in the range _0.0_ to _1.0_, to increase or decrease the
+	background opacity by with the *alpha-increase* and
+	*alpha-decrease* key bindings. The change lasts until the window
+	is closed, *alpha-reset* is used, or the application changes the
+	background color. Default: _0.1_.
+
 *include*
 	Path to configuration file to import.
 	
@@ -1625,6 +1646,19 @@ e.g. *search-start=none*.
 
 *font-reset*
 	Resets the font size to the default. Default: _Control+0 Control+KP\_0_.
+
+*font-preset-next*, *font-preset-prev*
+	Switches to the next larger, or smaller, size in
+	*font-size-presets*, wrapping around at the end of the list.
+	Default: _none_.
+
+*alpha-increase*, *alpha-decrease*
+	Increases, or decreases, the background opacity by
+	*alpha-adjustment*. Default: _none_.
+
+*alpha-reset*
+	Resets the background opacity to the color theme's *alpha*.
+	Default: _none_.
 
 *spawn-terminal*
 	Spawns a new terminal. If the shell has been configured to emit

@@ -295,6 +295,14 @@ struct config {
 
     struct font_size_adjustment font_size_adjustment;
 
+    /* Font sizes (points, ascending) for font-preset-next/prev */
+    struct {
+        float *sizes;
+        size_t count;
+    } font_size_presets;
+
+    float alpha_adjustment;  /* alpha-increase/decrease step, 0.0 - 1.0 */
+
     /* Custom font metrics (-1 = use real font metrics) */
     struct pt_or_px line_height;
     struct pt_or_px letter_spacing;

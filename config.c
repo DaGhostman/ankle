@@ -192,6 +192,11 @@ static const char *const binding_action_map[] = {
     [BIND_ACTION_CLEAR_TO_PROMPT] = "clear-to-prompt",
     [BIND_ACTION_CLIPBOARD_COPY_OR_CANCEL] = "clipboard-copy-or-cancel",
     [BIND_ACTION_VI_MODE_START] = "vi-mode-start",
+    [BIND_ACTION_FONT_SIZE_PRESET_NEXT] = "font-preset-next",
+    [BIND_ACTION_FONT_SIZE_PRESET_PREV] = "font-preset-prev",
+    [BIND_ACTION_ALPHA_INCREASE] = "alpha-increase",
+    [BIND_ACTION_ALPHA_DECREASE] = "alpha-decrease",
+    [BIND_ACTION_ALPHA_RESET] = "alpha-reset",
 
     /* Mouse-specific actions */
     [BIND_ACTION_SCROLLBACK_UP_MOUSE] = "scrollback-up-mouse",
@@ -705,6 +710,51 @@ value_to_dimensions(struct context *ctx, uint32_t *x, uint32_t *y)
         return false;
     }
 
+    return true;
+}
+
+static int
+float_cmp(const void *_a, const void *_b)
+{
+    const float a = *(const float *)_a;
+    const float b = *(const float *)_b;
+    return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/* A list of font sizes, in points, separated by spaces or commas */
+static bool
+value_to_font_size_presets(struct context *ctx, float **sizes, size_t *count)
+{
+    float *new_sizes = NULL;
+    size_t new_count = 0;
+
+    char *copy = xstrdup(ctx->value);
+    for (char *save = NULL, *tok = strtok_r(copy, " ,", &save);
+         tok != NULL;
+         tok = strtok_r(NULL, " ,", &save))
+    {
+        errno = 0;
+        char *end = NULL;
+        float size = strtof(tok, &end);
+
+        if (errno != 0 || *end != '\0' || !(size > 0.) || size > 1000.) {
+            LOG_CONTEXTUAL_ERR("invalid font size: %s", tok);
+            free(new_sizes);
+            free(copy);
+            return false;
+        }
+
+        new_sizes = xreallocarray(new_sizes, new_count + 1, sizeof(new_sizes[0]));
+        new_sizes[new_count++] = size;
+    }
+    free(copy);
+
+    if (new_count > 0)
+        qsort(new_sizes, new_count, sizeof(new_sizes[0]), &float_cmp);
+
+    free(*sizes);
+    *sizes = new_sizes;
+    *count = new_count;
     return true;
 }
 
@@ -1364,6 +1414,24 @@ parse_section_main(struct context *ctx)
 
     else if (streq(key, "vi-mode"))
         return value_to_bool(ctx, &conf->vi_mode);
+
+    else if (streq(key, "alpha-adjustment")) {
+        float amount;
+        if (!value_to_float(ctx, &amount))
+            return false;
+
+        if (!(amount >= 0. && amount <= 1.)) {
+            LOG_CONTEXTUAL_ERR("not in range 0.0-1.0");
+            return false;
+        }
+
+        conf->alpha_adjustment = amount;
+        return true;
+    }
+
+    else if (streq(key, "font-size-presets"))
+        return value_to_font_size_presets(ctx, &conf->font_size_presets.sizes,
+                                          &conf->font_size_presets.count);
 
     else if (streq(key, "dim-unfocused")) {
         float amount;
@@ -3918,6 +3986,7 @@ config_load(struct config *conf, const char *conf_path,
         .startup_mode = STARTUP_WINDOWED,
         .fonts = {{0}},
         .font_size_adjustment = {.percent = 0., .pt_or_px = {.pt = 0.5, .px = 0}},
+        .alpha_adjustment = 0.1,
         .line_height = {.pt = 0, .px = -1},
         .letter_spacing = {.pt = 0, .px = 0},
         .horizontal_letter_offset = {.pt = 0, .px = 0},
@@ -4405,6 +4474,11 @@ config_clone(const struct config *old)
         config_font_features_clone(&conf->font_features[i], &old->font_features[i]);
     config_font_list_clone(&conf->csd.font, &old->csd.font);
 
+    conf->font_size_presets.sizes = old->font_size_presets.count > 0
+        ? xmemdup(old->font_size_presets.sizes,
+                  old->font_size_presets.count * sizeof(old->font_size_presets.sizes[0]))
+        : NULL;
+
     conf->url.label_letters = xc32dup(old->url.label_letters);
     spawn_template_clone(&conf->url.launch, &old->url.launch);
     conf->url.regex = xstrdup(old->url.regex);
@@ -4506,6 +4580,7 @@ config_free(struct config *conf)
     free(conf->server_socket_path);
 
     config_font_list_destroy(&conf->csd.font);
+    free(conf->font_size_presets.sizes);
 
     free(conf->url.label_letters);
     spawn_template_free(&conf->url.launch);

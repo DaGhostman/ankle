@@ -144,6 +144,12 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 * `[scrollback].search-freeze`: stop reading client output while in
   scrollback search mode, so that the content doesn't change
   underneath the search ([foot#646][foot-646]).
+* Font size presets: `font-size-presets` lists font sizes that the
+  new `font-preset-next` and `font-preset-prev` key bindings step
+  through ([foot#1563][foot-1563]).
+* Runtime opacity: new `alpha-increase`, `alpha-decrease` and
+  `alpha-reset` key bindings, stepping by `alpha-adjustment`
+  ([foot#1078][foot-1078]).
 
 ### Changed
 
@@ -201,6 +207,8 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-308]: https://codeberg.org/dnkl/foot/issues/308
 [foot-1447]: https://codeberg.org/dnkl/foot/issues/1447
 [foot-646]: https://codeberg.org/dnkl/foot/issues/646
+[foot-1563]: https://codeberg.org/dnkl/foot/issues/1563
+[foot-1078]: https://codeberg.org/dnkl/foot/issues/1078
 
 
 ## Unreleased
