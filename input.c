@@ -3733,6 +3733,7 @@ const struct wl_touch_listener touch_listener = {
     .cancel = wl_touch_cancel,
 };
 
+#if defined(_DEBUG)
 UNITTEST
 {
     /* Bindings that pass the key through to the application when
@@ -3820,3 +3821,4 @@ UNITTEST
 
     term_test_destroy(&term);
 }
+#endif /* _DEBUG */

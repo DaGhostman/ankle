@@ -3016,7 +3016,6 @@ term_test_write(struct terminal *term, const char *text)
         }
     }
 }
-#endif
 
 UNITTEST
 {
@@ -3167,6 +3166,7 @@ UNITTEST
 
     term_test_destroy(&term);
 }
+#endif /* _DEBUG */
 
 UNITTEST
 {

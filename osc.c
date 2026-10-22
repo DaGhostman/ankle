@@ -1892,7 +1892,6 @@ osc_test_dispatch(struct terminal *term, const char *seq)
     term->vt.osc.data = NULL;
     term->vt.osc.size = term->vt.osc.idx = 0;
 }
-#endif
 
 UNITTEST
 {
@@ -2003,3 +2002,4 @@ UNITTEST
 
     term_test_destroy(&term);
 }
+#endif /* _DEBUG */
