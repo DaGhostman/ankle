@@ -197,6 +197,7 @@ static const char *const binding_action_map[] = {
     [BIND_ACTION_ALPHA_INCREASE] = "alpha-increase",
     [BIND_ACTION_ALPHA_DECREASE] = "alpha-decrease",
     [BIND_ACTION_ALPHA_RESET] = "alpha-reset",
+    [BIND_ACTION_EXEC] = "exec",
 
     /* Mouse-specific actions */
     [BIND_ACTION_SCROLLBACK_UP_MOUSE] = "scrollback-up-mouse",
@@ -2731,8 +2732,9 @@ parse_key_binding_section(struct context *ctx,
 
         /* TODO: this is ugly... */
         if (action_map == binding_action_map &&
-            action >= BIND_ACTION_PIPE_SCROLLBACK &&
-            action <= BIND_ACTION_PIPE_COMMAND_OUTPUT)
+            ((action >= BIND_ACTION_PIPE_SCROLLBACK &&
+              action <= BIND_ACTION_PIPE_COMMAND_OUTPUT) ||
+             action == BIND_ACTION_EXEC))
         {
             ssize_t pipe_remove_len = pipe_argv_from_value(ctx, &aux.pipe);
             if (pipe_remove_len <= 0)
@@ -2740,6 +2742,18 @@ parse_key_binding_section(struct context *ctx,
 
             aux.type = BINDING_AUX_PIPE;
             aux.master_copy = true;
+        } else if (action_map == binding_action_map &&
+                   action == BIND_ACTION_SPAWN_TERMINAL)
+        {
+            /* Optional command to run in the new terminal */
+            ssize_t cmd_remove_len = pipe_argv_from_value(ctx, &aux.pipe);
+            if (cmd_remove_len < 0)
+                return false;
+
+            if (cmd_remove_len > 0) {
+                aux.type = BINDING_AUX_PIPE;
+                aux.master_copy = true;
+            }
         } else if (action_map == binding_action_map &&
                    action >= BIND_ACTION_REGEX_LAUNCH &&
                    action <= BIND_ACTION_REGEX_COPY)

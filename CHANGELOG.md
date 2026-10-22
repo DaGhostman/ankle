@@ -150,6 +150,15 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 * Runtime opacity: new `alpha-increase`, `alpha-decrease` and
   `alpha-reset` key bindings, stepping by `alpha-adjustment`
   ([foot#1078][foot-1078]).
+* `spawn-terminal` can run a command in the new terminal:
+  `spawn-terminal=[distrobox enter] Control+Shift+n`
+  ([foot#1856][foot-1856]).
+* `exec` key binding: runs a command with its output connected to
+  the terminal, e.g. `exec=[script.sh] Control+Shift+a`
+  ([foot#1039][foot-1039]).
+* Terminals started with `spawn-terminal`, and `exec` commands, are
+  passed an XDG activation token, so that compositors with focus
+  stealing prevention focus the new window ([foot#2465][foot-2465]).
 
 ### Changed
 
@@ -209,6 +218,9 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-646]: https://codeberg.org/dnkl/foot/issues/646
 [foot-1563]: https://codeberg.org/dnkl/foot/issues/1563
 [foot-1078]: https://codeberg.org/dnkl/foot/issues/1078
+[foot-1856]: https://codeberg.org/dnkl/foot/issues/1856
+[foot-1039]: https://codeberg.org/dnkl/foot/issues/1039
+[foot-2465]: https://codeberg.org/dnkl/foot/issues/2465
 
 
 ## Unreleased

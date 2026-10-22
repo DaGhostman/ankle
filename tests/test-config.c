@@ -1565,9 +1565,55 @@ test_section_key_bindings(void)
             &ctx, &parse_section_key_bindings,
             action, BIND_ACTION_KEY_COUNT - 1,
             binding_action_map, &conf.bindings.key, KEY_BINDING,
-            action >= BIND_ACTION_PIPE_SCROLLBACK && action <= BIND_ACTION_PIPE_COMMAND_OUTPUT,
+            (action >= BIND_ACTION_PIPE_SCROLLBACK && action <= BIND_ACTION_PIPE_COMMAND_OUTPUT) ||
+            action == BIND_ACTION_EXEC,
             action >= BIND_ACTION_REGEX_LAUNCH && action <= BIND_ACTION_REGEX_COPY);
     }
+
+    config_free(&conf);
+}
+
+static void
+test_spawn_terminal_command(void)
+{
+    struct config conf = {0};
+    struct context ctx = {
+        .conf = &conf, .section = "key-bindings", .path = "unittest"};
+
+    /* Without a command */
+    ctx.key = "spawn-terminal";
+    ctx.value = "Control+Shift+n";
+    xassert(parse_section_key_bindings(&ctx));
+    xassert(conf.bindings.key.count == 1);
+    xassert(conf.bindings.key.arr[0].aux.type == BINDING_AUX_NONE);
+
+    /* With a command */
+    ctx.value = "[distrobox enter \"my box\"] Control+Shift+m";
+    xassert(parse_section_key_bindings(&ctx));
+    xassert(conf.bindings.key.count == 2);
+
+    const struct config_key_binding *b = &conf.bindings.key.arr[1];
+    xassert(b->action == BIND_ACTION_SPAWN_TERMINAL);
+    xassert(b->aux.type == BINDING_AUX_PIPE);
+    xassert(streq(b->aux.pipe.args[0], "distrobox"));
+    xassert(streq(b->aux.pipe.args[1], "enter"));
+    xassert(streq(b->aux.pipe.args[2], "my box"));
+    xassert(b->aux.pipe.args[3] == NULL);
+
+    /* Syntax errors */
+    ctx.value = "[distrobox enter Control+Shift+o";
+    xassert(!parse_section_key_bindings(&ctx));
+
+    /* exec requires a command */
+    ctx.key = "exec";
+    ctx.value = "Control+Shift+a";
+    xassert(!parse_section_key_bindings(&ctx));
+    ctx.value = "[foo.sh --bar] Control+Shift+a";
+    xassert(parse_section_key_bindings(&ctx));
+    xassert(conf.bindings.key.count == 3);
+    xassert(conf.bindings.key.arr[2].action == BIND_ACTION_EXEC);
+    xassert(conf.bindings.key.arr[2].aux.type == BINDING_AUX_PIPE);
+    xassert(streq(conf.bindings.key.arr[2].aux.pipe.args[1], "--bar"));
 
     config_free(&conf);
 }
@@ -1973,6 +2019,7 @@ main(int argc, const char *const *argv)
     test_section_colors_light();
     test_section_csd();
     test_section_key_bindings();
+    test_spawn_terminal_command();
     test_section_key_bindings_collisions();
     test_section_search_bindings();
     test_section_search_bindings_collisions();
