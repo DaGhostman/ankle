@@ -270,6 +270,8 @@ struct config {
         float amount;
     } dim;
 
+    float dim_unfocused;  /* 0.0 (disabled) - 1.0 */
+
     struct {
         bool enabled;
         bool palette_based;

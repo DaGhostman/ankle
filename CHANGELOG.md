@@ -118,6 +118,8 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   `Control+c` ([foot#1333][foot-1333]).
 * `selection-clear-on-copy` option, clearing the selection once it has
   been copied to the clipboard ([foot#340][foot-340]).
+* `dim-unfocused` option, dimming text and background colors while
+  the window is unfocused ([foot#2330][foot-2330]).
 
 ### Changed
 
@@ -169,6 +171,7 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-1030]: https://codeberg.org/dnkl/foot/issues/1030
 [foot-1333]: https://codeberg.org/dnkl/foot/issues/1333
 [foot-340]: https://codeberg.org/dnkl/foot/issues/340
+[foot-2330]: https://codeberg.org/dnkl/foot/issues/2330
 
 
 ## Unreleased

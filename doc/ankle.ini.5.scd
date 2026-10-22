@@ -610,6 +610,19 @@ re-applied on top of the reloaded configuration.
 	Clipboard target to automatically copy selected text to. One of
 	*none*, *primary*, *clipboard* or *both*. Default: _primary_.
 
+*dim-unfocused*
+	How much to dim the window's colors while it does not have
+	keyboard focus, as a floating point number in the range _0.0_
+	to _1.0_. Both text and background colors are blended towards
+	the color theme's *dim-blend-towards* color (black for the dark
+	theme, white for the light theme, by default); _0.5_ blends them
+	halfway, and _1.0_ all the way.
+	
+	This only affects rendering; colors reported to applications are
+	not changed. Images (sixels) are not dimmed.
+	
+	_0.0_ disables dimming. Default: _0.0_.
+
 *selection-clear-on-copy*
 	Boolean. When enabled, the selection is cleared once it has been
 	copied to the clipboard; either with the *clipboard-copy* key

@@ -1322,6 +1322,20 @@ parse_section_main(struct context *ctx)
     else if (streq(key, "selection-clear-on-copy"))
         return value_to_bool(ctx, &conf->selection_clear_on_copy);
 
+    else if (streq(key, "dim-unfocused")) {
+        float amount;
+        if (!value_to_float(ctx, &amount))
+            return false;
+
+        if (!(amount >= 0. && amount <= 1.)) {
+            LOG_CONTEXTUAL_ERR("not in range 0.0-1.0");
+            return false;
+        }
+
+        conf->dim_unfocused = amount;
+        return true;
+    }
+
     else if (streq(key, "box-drawings-uses-font-glyphs"))
         return value_to_bool(ctx, &conf->box_drawings_uses_font_glyphs);
 

@@ -3702,6 +3702,13 @@ term_visual_focus_in(struct terminal *term)
     term->visual_focus = true;
     term_cursor_blink_update(term);
     render_refresh_csd(term);
+
+    if (term->conf->dim_unfocused > 0.) {
+        /* Every cell changes color */
+        term_damage_view(term);
+        term_damage_margins(term);
+        render_refresh(term);
+    }
 }
 
 void
@@ -3713,6 +3720,13 @@ term_visual_focus_out(struct terminal *term)
     term->visual_focus = false;
     term_cursor_blink_update(term);
     render_refresh_csd(term);
+
+    if (term->conf->dim_unfocused > 0.) {
+        /* Every cell changes color */
+        term_damage_view(term);
+        term_damage_margins(term);
+        render_refresh(term);
+    }
 }
 
 void

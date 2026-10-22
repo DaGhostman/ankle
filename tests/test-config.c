@@ -514,6 +514,45 @@ test_font_features(struct context *ctx)
 }
 
 static void
+test_unit_float(struct context *ctx, bool (*parse_fun)(struct context *ctx),
+                const char *key, const float *ptr)
+{
+    /* A float in the range 0.0 - 1.0 */
+    ctx->key = key;
+
+    static const struct {
+        const char *option_string;
+        float value;
+        bool invalid;
+    } input[] = {
+        {"0", 0}, {"0.25", 0.25}, {"1", 1}, {"1.0", 1},
+        {"-0.1", 0, true}, {"1.1", 0, true}, {"nan", 0, true},
+        {"abc", 0, true},
+    };
+
+    for (size_t i = 0; i < ALEN(input); i++) {
+        ctx->value = input[i].option_string;
+
+        if (input[i].invalid) {
+            if (parse_fun(ctx)) {
+                BUG("[%s].%s=%s: did not fail to parse as expected",
+                    ctx->section, ctx->key, ctx->value);
+            }
+        } else {
+            if (!parse_fun(ctx)) {
+                BUG("[%s].%s=%s: failed to parse",
+                    ctx->section, ctx->key, ctx->value);
+            }
+            if (*ptr != input[i].value) {
+                BUG("[%s].%s=%s: set value (%f) not the expected one (%f)",
+                    ctx->section, ctx->key, ctx->value,
+                    *ptr, input[i].value);
+            }
+        }
+    }
+}
+
+static void
 test_section_main(void)
 {
     struct config conf = {0};
@@ -533,6 +572,7 @@ test_section_main(void)
     test_boolean(&ctx, &parse_section_main, "box-drawings-uses-font-glyphs", &conf.box_drawings_uses_font_glyphs);
     test_boolean(&ctx, &parse_section_main, "opaque-fullscreen", &conf.opaque_fullscreen);
     test_boolean(&ctx, &parse_section_main, "selection-clear-on-copy", &conf.selection_clear_on_copy);
+    test_unit_float(&ctx, &parse_section_main, "dim-unfocused", &conf.dim_unfocused);
     test_boolean(&ctx, &parse_section_main, "ligatures", &conf.ligatures.enabled);
     {
         ctx.key = "ligatures";
