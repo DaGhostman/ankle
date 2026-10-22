@@ -322,6 +322,30 @@ color_dim(const struct terminal *term, uint32_t color)
         conf->dim.amount);
 }
 
+/*
+ * Dims a color while the window does not have (visual) focus, by
+ * blending it towards the current theme's dim-blend-towards color.
+ */
+static inline uint32_t
+color_unfocused(const struct terminal *term, uint32_t color)
+{
+    const float amount = term->conf->dim_unfocused;
+
+    if (likely(term->visual_focus || amount <= 0.))
+        return color;
+
+    const struct color_theme *theme = term_theme_get(term);
+    const uint32_t to =
+        theme->dim_blend_towards == DIM_BLEND_TOWARDS_BLACK ? 0x00000000 : 0x00ffffff;
+
+    uint32_t alpha = color & 0xff000000;
+    uint8_t r = i_lerp((color >> 16) & 0xff, (to >> 16) & 0xff, amount);
+    uint8_t g = i_lerp((color >> 8) & 0xff, (to >> 8) & 0xff, amount);
+    uint8_t b = i_lerp((color >> 0) & 0xff, (to >> 0) & 0xff, amount);
+
+    return alpha | (r << 16) | (g << 8) | (b << 0);
+}
+
 static inline uint32_t
 color_brighten(const struct terminal *term, uint32_t color)
 {
@@ -847,6 +871,9 @@ cell_colors(const struct terminal *term, const struct cell *cell)
     if (cell->attrs.blink && term->blink.state == BLINK_OFF)
         _fg = color_blend_towards(_fg, 0x00000000, term->conf->dim.amount);
 
+    _fg = color_unfocused(term, _fg);
+    _bg = color_unfocused(term, _bg);
+
     return (struct cell_colors){.fg = _fg, .bg = _bg, .alpha = alpha};
 }
 
@@ -1130,12 +1157,15 @@ draw_cell_decorations(const struct terminal *term, pixman_image_t *pix,
                     switch (range->underline.color_src) {
                     case COLOR_BASE256:
                         underline_color = color_hex_to_pixman(
-                            term->colors.table[range->underline.color], gamma_correct);
+                            color_unfocused(
+                                term, term->colors.table[range->underline.color]),
+                            gamma_correct);
                         break;
 
                     case COLOR_RGB:
-                        underline_color =
-                            color_hex_to_pixman(range->underline.color, gamma_correct);
+                        underline_color = color_hex_to_pixman(
+                            color_unfocused(term, range->underline.color),
+                            gamma_correct);
                         break;
 
                     case COLOR_DEFAULT:
@@ -1162,9 +1192,11 @@ draw_cell_decorations(const struct terminal *term, pixman_image_t *pix,
 
     if (unlikely(cell->attrs.url && term->conf->url.style != UNDERLINE_NONE)) {
         pixman_color_t url_color = color_hex_to_pixman(
-            term->conf->colors_dark.use_custom.url
-            ? term->conf->colors_dark.url
-            : term->colors.table[3],
+            color_unfocused(
+                term,
+                term->conf->colors_dark.use_custom.url
+                ? term->conf->colors_dark.url
+                : term->colors.table[3]),
             gamma_correct);
 
         draw_styled_underline(
@@ -1581,7 +1613,8 @@ render_margin(struct terminal *term, struct buffer *buf,
     const int line_count = end_line - start_line;
 
     const bool gamma_correct = wayl_do_linear_blending(term->wl, term->conf);
-    const uint32_t _bg = !term->reverse ? term->colors.bg : term->colors.fg;
+    const uint32_t _bg = color_unfocused(
+        term, !term->reverse ? term->colors.bg : term->colors.fg);
     uint16_t alpha = term->colors.alpha;
 
     if (wayl_win_is_forced_opaque(term->window)) {
@@ -5842,4 +5875,75 @@ render_buffer_release_callback(struct buffer *buf, void *data)
     xassert(tll_length(term->render.workers.queue) == 0);
     tll_push_back(term->render.workers.queue, -3);
     mtx_unlock(&term->render.workers.lock);
+}
+
+UNITTEST
+{
+    /* dim-unfocused */
+    struct config conf = {
+        .colors_dark = {.dim_blend_towards = DIM_BLEND_TOWARDS_BLACK},
+        .colors_light = {.dim_blend_towards = DIM_BLEND_TOWARDS_WHITE},
+    };
+    struct wl_window win = {0};
+    struct terminal term = {
+        .conf = &conf,
+        .window = &win,
+        .visual_focus = true,
+        .colors = {
+            .fg = 0xffffff,
+            .bg = 0x202020,
+            .alpha = 0xffff,
+            .active_theme = COLOR_THEME_DARK,
+        },
+    };
+    win.term = &term;
+    term.colors.table[1] = 0xc00000;
+
+    const struct cell plain = {.wc = 'a'};
+    const struct cell red_on_default = {
+        .wc = 'a',
+        .attrs = {.fg_src = COLOR_BASE16, .fg = 1},
+    };
+
+    /* Disabled: same colors whether focused or not */
+    struct cell_colors c = cell_colors(&term, &plain);
+    xassert(c.fg == 0xffffff && c.bg == 0x202020);
+    term.visual_focus = false;
+    c = cell_colors(&term, &plain);
+    xassert(c.fg == 0xffffff && c.bg == 0x202020);
+
+    /* Enabled, focused: unchanged */
+    conf.dim_unfocused = 0.5;
+    term.visual_focus = true;
+    c = cell_colors(&term, &plain);
+    xassert(c.fg == 0xffffff && c.bg == 0x202020);
+
+    /* Enabled, unfocused: foreground and background blended halfway
+     * towards black (dark theme) */
+    term.visual_focus = false;
+    c = cell_colors(&term, &plain);
+    xassert(c.fg == 0x7f7f7f);
+    xassert(c.bg == 0x101010);
+    xassert(c.alpha == 0xffff);
+
+    c = cell_colors(&term, &red_on_default);
+    xassert(c.fg == 0x600000);
+
+    /* Light theme: blended towards white */
+    term.colors.active_theme = COLOR_THEME_LIGHT;
+    term.colors.fg = 0x000000;
+    term.colors.bg = 0xe0e0e0;
+    c = cell_colors(&term, &plain);
+    xassert(c.fg == 0x7f7f7f);
+    xassert(c.bg == 0xefefef);
+
+    /* Fully dimmed */
+    conf.dim_unfocused = 1.0;
+    c = cell_colors(&term, &plain);
+    xassert(c.fg == 0xffffff && c.bg == 0xffffff);
+
+    /* Alpha bits of the color are preserved */
+    term.colors.active_theme = COLOR_THEME_DARK;
+    conf.dim_unfocused = 0.5;
+    xassert(color_unfocused(&term, 0xff808080) == 0xff404040);
 }

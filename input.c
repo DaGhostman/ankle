@@ -180,6 +180,24 @@ execute_binding(struct seat *seat, struct terminal *term,
 
     case BIND_ACTION_CLIPBOARD_COPY:
         selection_to_clipboard(seat, term, serial);
+        if (term->conf->selection_clear_on_copy)
+            selection_cancel(term);
+        return true;
+
+    case BIND_ACTION_CLIPBOARD_COPY_OR_CANCEL:
+        /*
+         * Without a selection, let the key through to the
+         * application, with its normal encoding (e.g. Control+c
+         * interrupts the running program)
+         */
+        if (term->selection.coords.start.row < 0 ||
+            term->selection.coords.end.row < 0)
+        {
+            return false;
+        }
+
+        selection_to_clipboard(seat, term, serial);
+        selection_cancel(term);
         return true;
 
     case BIND_ACTION_CLIPBOARD_PASTE:
@@ -508,6 +526,22 @@ execute_binding(struct seat *seat, struct terminal *term,
 
     case BIND_ACTION_CONFIG_RELOAD:
         config_reload_request();
+        return true;
+
+    case BIND_ACTION_CLEAR_SCROLLBACK:
+        if (term->grid != &term->normal)
+            return false;
+
+        term_erase_scrollback(term);
+        render_refresh(term);
+        return true;
+
+    case BIND_ACTION_CLEAR_TO_PROMPT:
+        if (term->grid != &term->normal)
+            return false;
+
+        term_clear_to_prompt(term);
+        render_refresh(term);
         return true;
 
     case BIND_ACTION_SELECT_BEGIN:
@@ -3698,3 +3732,93 @@ const struct wl_touch_listener touch_listener = {
     .frame = wl_touch_frame,
     .cancel = wl_touch_cancel,
 };
+
+#if defined(_DEBUG)
+UNITTEST
+{
+    /* Bindings that pass the key through to the application when
+     * they don't apply */
+    struct config conf = {0};
+    struct seat seat = {0};
+    struct terminal term;
+    term_test_init(&term, &conf, 3, 4, 8);
+
+    /* clipboard-copy-or-cancel, without a selection: not consumed */
+    const struct key_binding copy_or_cancel = {
+        .type = KEY_BINDING,
+        .action = BIND_ACTION_CLIPBOARD_COPY_OR_CANCEL,
+    };
+    xassert(!execute_binding(&seat, &term, &copy_or_cancel, 1, 1));
+
+    /* With a selection: consumed, and the selection is cleared. The
+     * selection only covers empty cells, so that nothing is actually
+     * sent to the (non-existing) compositor */
+    term.selection.coords.start = (struct coord){0, 0};
+    term.selection.coords.end = (struct coord){1, 0};
+    term.selection.kind = SELECTION_CHAR_WISE;
+    xassert(execute_binding(&seat, &term, &copy_or_cancel, 1, 1));
+    xassert(term.selection.coords.start.row < 0);
+    xassert(term.selection.coords.end.row < 0);
+    xassert(term.selection.kind == SELECTION_NONE);
+
+    /* Pressing it again (no selection anymore) is not consumed */
+    xassert(!execute_binding(&seat, &term, &copy_or_cancel, 1, 1));
+
+    /* clipboard-copy keeps the selection by default... */
+    const struct key_binding copy = {
+        .type = KEY_BINDING,
+        .action = BIND_ACTION_CLIPBOARD_COPY,
+    };
+    term.selection.coords.start = (struct coord){0, 0};
+    term.selection.coords.end = (struct coord){1, 0};
+    term.selection.kind = SELECTION_CHAR_WISE;
+    xassert(execute_binding(&seat, &term, &copy, 1, 1));
+    xassert(term.selection.coords.end.row == 0);
+
+    /* ...but clears it with selection-clear-on-copy */
+    conf.selection_clear_on_copy = true;
+    xassert(execute_binding(&seat, &term, &copy, 1, 1));
+    xassert(term.selection.coords.end.row < 0);
+    xassert(term.selection.kind == SELECTION_NONE);
+
+    /* clear-scrollback and clear-to-prompt only apply to the normal
+     * screen; on the alt screen, the key goes to the application */
+    const struct key_binding clear_sb = {
+        .type = KEY_BINDING,
+        .action = BIND_ACTION_CLEAR_SCROLLBACK,
+    };
+    const struct key_binding clear_to_prompt = {
+        .type = KEY_BINDING,
+        .action = BIND_ACTION_CLEAR_TO_PROMPT,
+    };
+
+    term.grid = &term.alt;
+    xassert(!execute_binding(&seat, &term, &clear_sb, 1, 1));
+    xassert(!execute_binding(&seat, &term, &clear_to_prompt, 1, 1));
+    term.grid = &term.normal;
+
+    /* Fill the scrollback, then clear it */
+    term_test_write(&term, "1\r\n2\r\n3\r\n4\r\n5\r\n6");
+    xassert(term.normal.rows[0] != NULL);
+    xassert(term.normal.offset == 3);
+
+    xassert(execute_binding(&seat, &term, &clear_sb, 1, 1));
+    for (int r = 0; r < term.normal.num_rows; r++) {
+        const bool on_screen =
+            ((r - term.normal.offset) & (term.normal.num_rows - 1)) < term.rows;
+        xassert(on_screen == (term.normal.rows[r] != NULL));
+    }
+
+    /* The screen itself is untouched */
+    xassert(grid_row(term.grid, 0)->cells[0].wc == '4');
+    xassert(grid_row(term.grid, 2)->cells[0].wc == '6');
+    xassert(term.grid->cursor.point.row == 2);
+
+    /* clear-to-prompt: cursor row ends up on top */
+    xassert(execute_binding(&seat, &term, &clear_to_prompt, 1, 1));
+    xassert(term.grid->cursor.point.row == 0);
+    xassert(grid_row(term.grid, 0)->cells[0].wc == '6');
+
+    term_test_destroy(&term);
+}
+#endif /* _DEBUG */

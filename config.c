@@ -188,6 +188,9 @@ static const char *const binding_action_map[] = {
     [BIND_ACTION_THEME_SWITCH_LIGHT] = "color-theme-switch-light",
     [BIND_ACTION_THEME_TOGGLE] = "color-theme-toggle",
     [BIND_ACTION_CONFIG_RELOAD] = "config-reload",
+    [BIND_ACTION_CLEAR_SCROLLBACK] = "clear-scrollback",
+    [BIND_ACTION_CLEAR_TO_PROMPT] = "clear-to-prompt",
+    [BIND_ACTION_CLIPBOARD_COPY_OR_CANCEL] = "clipboard-copy-or-cancel",
 
     /* Mouse-specific actions */
     [BIND_ACTION_SCROLLBACK_UP_MOUSE] = "scrollback-up-mouse",
@@ -265,6 +268,7 @@ struct context {
     unsigned lineno;
 
     bool errors_are_fatal;
+    bool is_override;  /* Command line override (-o), not a file */
 };
 
 static const enum user_notification_kind log_class_to_notify_kind[LOG_CLASS_COUNT] = {
@@ -984,55 +988,105 @@ value_to_spawn_template(struct context *ctx,
 static bool parse_config_file(
     FILE *f, struct config *conf, const char *path, bool errors_are_fatal);
 
+/*
+ * Expands an include path: '~/' is replaced with $HOME, and relative
+ * paths are resolved against the directory of the including
+ * file. Returns NULL (after logging an error) if the path can't be
+ * expanded.
+ */
+static char *
+include_path_expand(struct context *ctx, const char *value)
+{
+    if (value[0] == '~' && value[1] == '/') {
+        const char *home_dir = getenv("HOME");
+
+        if (home_dir == NULL) {
+            LOG_CONTEXTUAL_ERRNO("failed to expand '~'");
+            return NULL;
+        }
+
+        return xstrjoin3(home_dir, "/", value + 2);
+    }
+
+    if (value[0] == '/')
+        return xstrdup(value);
+
+    if (ctx->is_override) {
+        /* There's no including file to resolve against */
+        LOG_CONTEXTUAL_ERR(
+            "not an absolute path (relative paths are only allowed "
+            "in configuration files)");
+        return NULL;
+    }
+
+    const char *including = ctx->path;
+    const char *slash = strrchr(including, '/');
+
+    if (slash == NULL) {
+        /* Including file is in the current working directory */
+        return xstrdup(value);
+    }
+
+    const size_t dir_len = slash - including;
+    const size_t value_len = strlen(value);
+    char *path = xmalloc(dir_len + 1 + value_len + 1);
+
+    memcpy(path, including, dir_len);
+    path[dir_len] = '/';
+    memcpy(&path[dir_len + 1], value, value_len + 1);
+    return path;
+}
+
+static bool
+parse_include(struct context *ctx, bool optional)
+{
+    struct config *conf = ctx->conf;
+
+    char *include_path = include_path_expand(ctx, ctx->value);
+    if (include_path == NULL)
+        return false;
+
+    /*
+     * Track the file even if it doesn't exist (an optional include),
+     * so that creating it triggers a configuration reload
+     */
+    tll_push_back(conf->source_files, xstrdup(include_path));
+
+    FILE *include = fopen(include_path, "r");
+
+    if (include == NULL) {
+        if (optional && errno == ENOENT) {
+            LOG_DBG("%s: optional include does not exist", include_path);
+            free(include_path);
+            return true;
+        }
+
+        LOG_CONTEXTUAL_ERRNO("failed to open");
+        free(include_path);
+        return false;
+    }
+
+    bool ret = parse_config_file(
+        include, conf, include_path, ctx->errors_are_fatal);
+    fclose(include);
+
+    LOG_INFO("imported sub-configuration from %s", include_path);
+    free(include_path);
+    return ret;
+}
+
 static bool
 parse_section_main(struct context *ctx)
 {
     struct config *conf = ctx->conf;
     const char *key = ctx->key;
     const char *value = ctx->value;
-    bool errors_are_fatal = ctx->errors_are_fatal;
 
-    if (streq(key, "include")) {
-        char *_include_path = NULL;
-        const char *include_path = NULL;
+    if (streq(key, "include"))
+        return parse_include(ctx, false);
 
-        if (value[0] == '~' && value[1] == '/') {
-            const char *home_dir = getenv("HOME");
-
-            if (home_dir == NULL) {
-                LOG_CONTEXTUAL_ERRNO("failed to expand '~'");
-                return false;
-            }
-
-            _include_path = xstrjoin3(home_dir, "/", value + 2);
-            include_path = _include_path;
-        } else
-            include_path = value;
-
-        if (include_path[0] != '/') {
-            LOG_CONTEXTUAL_ERR("not an absolute path");
-            free(_include_path);
-            return false;
-        }
-
-        FILE *include = fopen(include_path, "r");
-
-        if (include == NULL) {
-            LOG_CONTEXTUAL_ERRNO("failed to open");
-            free(_include_path);
-            return false;
-        }
-
-        tll_push_back(conf->source_files, xstrdup(include_path));
-
-        bool ret = parse_config_file(
-            include, conf, include_path, errors_are_fatal);
-        fclose(include);
-
-        LOG_INFO("imported sub-configuration from %s", include_path);
-        free(_include_path);
-        return ret;
-    }
+    else if (streq(key, "include-optional"))
+        return parse_include(ctx, true);
 
     else if (streq(key, "term"))
         return value_to_str(ctx, &conf->term);
@@ -1265,6 +1319,23 @@ parse_section_main(struct context *ctx)
             (int *)&conf->selection_target);
     }
 
+    else if (streq(key, "selection-clear-on-copy"))
+        return value_to_bool(ctx, &conf->selection_clear_on_copy);
+
+    else if (streq(key, "dim-unfocused")) {
+        float amount;
+        if (!value_to_float(ctx, &amount))
+            return false;
+
+        if (!(amount >= 0. && amount <= 1.)) {
+            LOG_CONTEXTUAL_ERR("not in range 0.0-1.0");
+            return false;
+        }
+
+        conf->dim_unfocused = amount;
+        return true;
+    }
+
     else if (streq(key, "box-drawings-uses-font-glyphs"))
         return value_to_bool(ctx, &conf->box_drawings_uses_font_glyphs);
 
@@ -1389,6 +1460,19 @@ parse_section_desktop_notifications(struct context *ctx)
     else if (streq(key, "inhibit-when-focused"))
         return value_to_bool(
             ctx, &conf->desktop_notifications.inhibit_when_focused);
+    else if (streq(key, "command-finished")) {
+        _Static_assert(
+            sizeof(conf->desktop_notifications.command_finished) == sizeof(int),
+            "enum is not 32-bit");
+
+        return value_to_enum(
+            ctx,
+            (const char *[]){"never", "unfocused", "always", NULL},
+            (int *)&conf->desktop_notifications.command_finished);
+    }
+    else if (streq(key, "command-finished-min-duration"))
+        return value_to_uint32(
+            ctx, 10, &conf->desktop_notifications.command_finished_min_duration);
     else {
         LOG_CONTEXTUAL_ERR("not a valid option: %s", key);
         return false;
@@ -3786,6 +3870,8 @@ config_load(struct config *conf, const char *conf_path,
                 .argv = {.args = NULL},
             },
             .inhibit_when_focused = true,
+            .command_finished = COMMAND_FINISHED_NEVER,
+            .command_finished_min_duration = 5,
         },
 
         .tweak = {
@@ -3965,6 +4051,7 @@ config_override_apply(struct config *conf, config_override_t *overrides,
         .path = "override",
         .lineno = 0,
         .errors_are_fatal = errors_are_fatal,
+        .is_override = true,
     };
     struct context *ctx = &context;
 

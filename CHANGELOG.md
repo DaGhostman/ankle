@@ -100,6 +100,31 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   binding. Works in server mode too. A configuration with errors is
   not applied; a desktop notification describes the error instead.
 * `opaque-fullscreen` option.
+* `include-optional` option, like `include`, but a missing file is
+  not an error ([foot#2449][foot-2449]).
+* `include` (and `include-optional`) accept paths relative to the
+  directory of the including file ([foot#1713][foot-1713]).
+* `OSC 133;L` (fresh line), which moves the cursor to the start of a
+  new line, unless it already is at the start of a line
+  ([foot#2477][foot-2477]).
+* `clear-scrollback` and `clear-to-prompt` key bindings (unbound by
+  default). The first erases the scrollback history; the second also
+  moves the current prompt (or, while a command is running, the
+  cursor's line) to the top of the window, erasing everything above
+  it ([foot#1030][foot-1030]).
+* `clipboard-copy-or-cancel` key binding (unbound by default). Copies
+  the selection to the clipboard, and clears it; without a selection,
+  the key is passed on to the application. Meant to be bound to
+  `Control+c` ([foot#1333][foot-1333]).
+* `selection-clear-on-copy` option, clearing the selection once it has
+  been copied to the clipboard ([foot#340][foot-340]).
+* `dim-unfocused` option, dimming text and background colors while
+  the window is unfocused ([foot#2330][foot-2330]).
+* `desktop-notifications.command-finished` and
+  `desktop-notifications.command-finished-min-duration` options,
+  showing a notification when a long running shell command finishes,
+  using shell integration (`OSC 133;C` and `OSC 133;D`)
+  ([foot#2390][foot-2390]).
 
 ### Changed
 
@@ -145,6 +170,14 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-pr-2480]: https://codeberg.org/dnkl/foot/pulls/2480
 [foot-2487]: https://codeberg.org/dnkl/foot/issues/2487
 [foot-2400]: https://codeberg.org/dnkl/foot/issues/2400
+[foot-2449]: https://codeberg.org/dnkl/foot/issues/2449
+[foot-1713]: https://codeberg.org/dnkl/foot/issues/1713
+[foot-2477]: https://codeberg.org/dnkl/foot/issues/2477
+[foot-1030]: https://codeberg.org/dnkl/foot/issues/1030
+[foot-1333]: https://codeberg.org/dnkl/foot/issues/1333
+[foot-340]: https://codeberg.org/dnkl/foot/issues/340
+[foot-2330]: https://codeberg.org/dnkl/foot/issues/2330
+[foot-2390]: https://codeberg.org/dnkl/foot/issues/2390
 
 
 ## Unreleased

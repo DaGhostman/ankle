@@ -270,6 +270,8 @@ struct config {
         float amount;
     } dim;
 
+    float dim_unfocused;  /* 0.0 (disabled) - 1.0 */
+
     struct {
         bool enabled;
         bool palette_based;
@@ -446,12 +448,20 @@ struct config {
         SELECTION_TARGET_CLIPBOARD,
         SELECTION_TARGET_BOTH
     } selection_target;
+    bool selection_clear_on_copy;
 
     struct {
         struct config_spawn_template command;
         struct config_spawn_template command_action_arg;
         struct config_spawn_template close;
         bool inhibit_when_focused;
+
+        enum {
+            COMMAND_FINISHED_NEVER,
+            COMMAND_FINISHED_UNFOCUSED,
+            COMMAND_FINISHED_ALWAYS,
+        } command_finished;
+        uint32_t command_finished_min_duration;  /* Seconds */
     } desktop_notifications;
 
     env_var_list_t env_vars;

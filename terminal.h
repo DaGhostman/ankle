@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include <threads.h>
+#include <time.h>
 #include <semaphore.h>
 
 #if defined(FOOT_GRAPHEME_CLUSTERING)
@@ -638,6 +639,12 @@ struct terminal {
     struct wl_window *window;
     bool visual_focus;
     bool kbd_focus;
+
+    /* Shell integration (OSC 133) state */
+    struct {
+        bool cmd_running;            /* Between OSC 133;C and OSC 133;D */
+        struct timespec cmd_started; /* CLOCK_MONOTONIC */
+    } shell_integration;
     enum term_surface active_surface;
 
     struct {
@@ -903,6 +910,8 @@ void term_erase(
     int start_row, int start_col,
     int end_row, int end_col);
 void term_erase_scrollback(struct terminal *term);
+void term_fresh_line(struct terminal *term);
+void term_clear_to_prompt(struct terminal *term);
 
 int term_row_rel_to_abs(const struct terminal *term, int row);
 void term_cursor_home(struct terminal *term);
@@ -1011,3 +1020,16 @@ static inline void term_reset_grapheme_state(struct terminal *term)
     term->vt.codepoint_merging_ok = false;
 #endif
 }
+
+#if defined(_DEBUG)
+/*
+ * Unit test helpers: a minimal terminal, without a window or a
+ * slave, with a normal grid of 'rows' x 'cols' cells, and room for
+ * 'scrollback_rows' rows in total (must be a power of two). Only the
+ * normal grid is set up. 'conf' may be NULL.
+ */
+void term_test_init(struct terminal *term, const struct config *conf,
+                    int rows, int cols, int scrollback_rows);
+void term_test_destroy(struct terminal *term);
+void term_test_write(struct terminal *term, const char *text);
+#endif
