@@ -455,6 +455,13 @@ struct config {
         struct config_spawn_template command_action_arg;
         struct config_spawn_template close;
         bool inhibit_when_focused;
+
+        enum {
+            COMMAND_FINISHED_NEVER,
+            COMMAND_FINISHED_UNFOCUSED,
+            COMMAND_FINISHED_ALWAYS,
+        } command_finished;
+        uint32_t command_finished_min_duration;  /* Seconds */
     } desktop_notifications;
 
     env_var_list_t env_vars;

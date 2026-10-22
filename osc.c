@@ -4,6 +4,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include <time.h>
 
 #include <sys/epoll.h>
 
@@ -1302,6 +1303,88 @@ kitty_text_size(struct terminal *term, char *string)
         false);
 }
 
+static void
+format_duration(char *buf, size_t size, long secs)
+{
+    if (secs < 60)
+        xsnprintf(buf, size, "%lds", secs);
+    else if (secs < 60 * 60)
+        xsnprintf(buf, size, "%ldm %lds", secs / 60, secs % 60);
+    else
+        xsnprintf(buf, size, "%ldh %ldm", secs / 3600, secs / 60 % 60);
+}
+
+/*
+ * Builds the notification for a command that finished (OSC 133;D),
+ * if one should be emitted. 'params' is what follows the 'D'; an
+ * optional exit status, ';<status>', possibly followed by more
+ * ';'-separated parameters.
+ */
+static bool
+command_finished_notification(const struct terminal *term,
+                              const struct timespec *now,
+                              const char *params,
+                              struct notification *notif)
+{
+    const struct config *conf = term->conf;
+
+    switch (conf->desktop_notifications.command_finished) {
+    case COMMAND_FINISHED_NEVER:
+        return false;
+
+    case COMMAND_FINISHED_UNFOCUSED:
+        if (term->kbd_focus)
+            return false;
+        break;
+
+    case COMMAND_FINISHED_ALWAYS:
+        break;
+    }
+
+    const struct timespec *start = &term->shell_integration.cmd_started;
+    long secs = now->tv_sec - start->tv_sec;
+    if (now->tv_nsec < start->tv_nsec)
+        secs--;
+
+    if (secs < 0 ||
+        (unsigned long)secs < conf->desktop_notifications.command_finished_min_duration)
+    {
+        return false;
+    }
+
+    bool have_status = false;
+    long status = 0;
+
+    if (params[0] == ';') {
+        char *end;
+        errno = 0;
+        status = strtol(&params[1], &end, 10);
+        have_status = errno == 0 && end != &params[1] &&
+                      (*end == '\0' || *end == ';');
+    }
+
+    char duration[32];
+    format_duration(duration, sizeof(duration), secs);
+
+    *notif = (struct notification){
+        .title = xstrdup(
+            have_status && status != 0 ? "Command failed" : "Command finished"),
+        .body = have_status
+            ? xasprintf("Exit status %ld, after %s", status, duration)
+            : xasprintf("Finished after %s", duration),
+        .category = xstrdup("x-ankle.command-finished"),
+        .expire_time = -1,
+        .focus = true,
+
+        /* 'always' means always; also when focused, regardless of
+         * inhibit-when-focused */
+        .force = conf->desktop_notifications.command_finished ==
+                 COMMAND_FINISHED_ALWAYS,
+    };
+
+    return true;
+}
+
 void
 osc_dispatch(struct terminal *term)
 {
@@ -1674,14 +1757,33 @@ osc_dispatch(struct terminal *term)
                     term->grid->cursor.point.row,
                     term->grid->cursor.point.col);
             term->grid->cur_row->shell_integration.cmd_start = term->grid->cursor.point.col;
+
+            term->shell_integration.cmd_running = true;
+            clock_gettime(CLOCK_MONOTONIC, &term->shell_integration.cmd_started);
             break;
 
-        case 'D':
+        case 'D': {
             LOG_DBG("FTCS_COMMAND_FINISHED: %dx%d",
                     term->grid->cursor.point.row,
                     term->grid->cursor.point.col);
             term->grid->cur_row->shell_integration.cmd_end = term->grid->cursor.point.col;
+
+            if (!term->shell_integration.cmd_running)
+                break;
+
+            term->shell_integration.cmd_running = false;
+
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+
+            struct notification notif;
+            if (command_finished_notification(term, &now, &string[1], &notif)) {
+                /* notify_notify() takes ownership of what it needs; free the rest */
+                notify_notify(term, &notif);
+                notify_free(term, &notif);
+            }
             break;
+        }
 
         case 'L':
             /* Fresh line; ensure the prompt starts on a new line */
@@ -1811,6 +1913,93 @@ UNITTEST
     osc_test_dispatch(&term, "133;A");
     xassert(!grid_row(term.grid, 0)->shell_integration.prompt_marker);
     xassert(grid_row(term.grid, 1)->shell_integration.prompt_marker);
+
+    term_test_destroy(&term);
+}
+
+UNITTEST
+{
+    /* Command finished notifications (OSC 133;C + OSC 133;D) */
+    struct config conf = {
+        .desktop_notifications = {
+            .command_finished = COMMAND_FINISHED_NEVER,
+            .command_finished_min_duration = 5,
+        },
+    };
+    struct terminal term;
+    term_test_init(&term, &conf, 3, 10, 4);
+    term.kbd_focus = false;
+
+    /* OSC 133;C starts the timer, OSC 133;D stops it */
+    xassert(!term.shell_integration.cmd_running);
+    osc_test_dispatch(&term, "133;C");
+    xassert(term.shell_integration.cmd_running);
+    xassert(grid_row(term.grid, 0)->shell_integration.cmd_start == 0);
+    osc_test_dispatch(&term, "133;D;0");
+    xassert(!term.shell_integration.cmd_running);
+
+    /* A stray OSC 133;D (no command running) is ignored */
+    osc_test_dispatch(&term, "133;D;0");
+    xassert(!term.shell_integration.cmd_running);
+
+    term.shell_integration.cmd_started = (struct timespec){.tv_sec = 100};
+    const struct timespec after_3s = {.tv_sec = 103};
+    const struct timespec after_10s = {.tv_sec = 110, .tv_nsec = 1};
+    const struct timespec after_95s = {.tv_sec = 195};
+    const struct timespec after_2h = {.tv_sec = 100 + 2 * 3600 + 5 * 60};
+
+    struct notification notif;
+
+    /* Disabled by default */
+    xassert(!command_finished_notification(&term, &after_10s, ";0", &notif));
+
+    conf.desktop_notifications.command_finished = COMMAND_FINISHED_UNFOCUSED;
+
+    /* Too short */
+    xassert(!command_finished_notification(&term, &after_3s, ";0", &notif));
+
+    /* Exit status 0 */
+    xassert(command_finished_notification(&term, &after_10s, ";0", &notif));
+    xassert(streq(notif.title, "Command finished"));
+    xassert(streq(notif.body, "Exit status 0, after 10s"));
+    xassert(!notif.force);
+    notify_free(&term, &notif);
+
+    /* Non-zero exit status, followed by more parameters */
+    xassert(command_finished_notification(&term, &after_95s, ";130;aid=42", &notif));
+    xassert(streq(notif.title, "Command failed"));
+    xassert(streq(notif.body, "Exit status 130, after 1m 35s"));
+    notify_free(&term, &notif);
+
+    /* No (or an invalid) exit status */
+    xassert(command_finished_notification(&term, &after_2h, "", &notif));
+    xassert(streq(notif.title, "Command finished"));
+    xassert(streq(notif.body, "Finished after 2h 5m"));
+    notify_free(&term, &notif);
+
+    xassert(command_finished_notification(&term, &after_10s, ";abc", &notif));
+    xassert(streq(notif.body, "Finished after 10s"));
+    notify_free(&term, &notif);
+
+    /* 'unfocused': nothing while focused */
+    term.kbd_focus = true;
+    xassert(!command_finished_notification(&term, &after_10s, ";0", &notif));
+
+    /* 'always': also while focused, and forced past
+     * inhibit-when-focused */
+    conf.desktop_notifications.command_finished = COMMAND_FINISHED_ALWAYS;
+    xassert(command_finished_notification(&term, &after_10s, ";0", &notif));
+    xassert(notif.force);
+    notify_free(&term, &notif);
+
+    /* Minimum duration of zero: every command */
+    conf.desktop_notifications.command_finished_min_duration = 0;
+    xassert(command_finished_notification(&term, &after_3s, ";0", &notif));
+    notify_free(&term, &notif);
+
+    /* Clock going backwards (shouldn't happen, but...) */
+    const struct timespec before = {.tv_sec = 50};
+    xassert(!command_finished_notification(&term, &before, ";0", &notif));
 
     term_test_destroy(&term);
 }

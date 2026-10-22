@@ -120,6 +120,11 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   been copied to the clipboard ([foot#340][foot-340]).
 * `dim-unfocused` option, dimming text and background colors while
   the window is unfocused ([foot#2330][foot-2330]).
+* `desktop-notifications.command-finished` and
+  `desktop-notifications.command-finished-min-duration` options,
+  showing a notification when a long running shell command finishes,
+  using shell integration (`OSC 133;C` and `OSC 133;D`)
+  ([foot#2390][foot-2390]).
 
 ### Changed
 
@@ -172,6 +177,7 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-1333]: https://codeberg.org/dnkl/foot/issues/1333
 [foot-340]: https://codeberg.org/dnkl/foot/issues/340
 [foot-2330]: https://codeberg.org/dnkl/foot/issues/2330
+[foot-2390]: https://codeberg.org/dnkl/foot/issues/2390
 
 
 ## Unreleased

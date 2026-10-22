@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include <threads.h>
+#include <time.h>
 #include <semaphore.h>
 
 #if defined(FOOT_GRAPHEME_CLUSTERING)
@@ -638,6 +639,12 @@ struct terminal {
     struct wl_window *window;
     bool visual_focus;
     bool kbd_focus;
+
+    /* Shell integration (OSC 133) state */
+    struct {
+        bool cmd_running;            /* Between OSC 133;C and OSC 133;D */
+        struct timespec cmd_started; /* CLOCK_MONOTONIC */
+    } shell_integration;
     enum term_surface active_surface;
 
     struct {

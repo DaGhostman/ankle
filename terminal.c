@@ -2156,6 +2156,7 @@ term_reset(struct terminal *term, bool hard)
     term->insert_mode = false;
     term->bracketed_paste = false;
     term->focus_events = false;
+    term->shell_integration.cmd_running = false;
     term->visibility_reports = false;
     term->num_lock_modifier = true;
     term->bell_action_enabled = true;

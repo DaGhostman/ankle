@@ -857,6 +857,17 @@ test_section_desktop_notifications(void)
     test_spawn_template(&ctx, &parse_section_desktop_notifications, "command", &conf.desktop_notifications.command);
     test_spawn_template(&ctx, &parse_section_desktop_notifications, "command-action-argument", &conf.desktop_notifications.command_action_arg);
     test_spawn_template(&ctx, &parse_section_desktop_notifications, "close", &conf.desktop_notifications.close);
+    test_enum(
+        &ctx, &parse_section_desktop_notifications, "command-finished",
+        3,
+        (const char *[]){"never", "unfocused", "always"},
+        (int []){COMMAND_FINISHED_NEVER,
+                 COMMAND_FINISHED_UNFOCUSED,
+                 COMMAND_FINISHED_ALWAYS},
+        (int *)&conf.desktop_notifications.command_finished);
+    test_uint32(&ctx, &parse_section_desktop_notifications,
+                "command-finished-min-duration",
+                &conf.desktop_notifications.command_finished_min_duration);
 
     config_free(&conf);
 }

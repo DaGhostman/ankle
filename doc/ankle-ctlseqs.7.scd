@@ -787,9 +787,10 @@ All _OSC_ sequences begin with *\\E]*, sometimes abbreviated _OSC_.
 |  \\E] 133 ; C \\E\\ 
 :  FinalTerm
 :  Mark start of command output
-|  \\E] 133 ; D \\E\\ 
+|  \\E] 133 ; D [; _status_] \\E\\ 
 :  FinalTerm
-:  Mark end of command output
+:  Mark end of command output. The optional exit _status_ is shown
+   in *command-finished* notifications (see *ankle.ini*(5)).
 |  \\E] 133 ; L \\E\\ 
 :  FinalTerm
 :  Fresh line: if the cursor is not at the start of a line, move it to

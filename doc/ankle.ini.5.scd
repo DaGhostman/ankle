@@ -1000,6 +1000,24 @@ xdgtoken=95ebdfe56e4f47ddb5bba9d7dc3a2c35
 	
 	Default: _yes_
 
+*command-finished*
+	When to show a notification when a shell command finishes. One of
+	*never*, *unfocused* (only when the window does not have keyboard
+	focus) or *always* (also when focused, regardless of
+	*inhibit-when-focused*).
+	
+	Requires shell integration: the shell must emit *OSC 133;C* when a
+	command starts executing, and *OSC 133;D* (optionally with the
+	exit status, *OSC 133;D;<status>*) when it finishes. Only commands
+	that ran for at least *command-finished-min-duration* seconds are
+	notified. Activating the notification focuses the window.
+	
+	Default: _never_.
+
+*command-finished-min-duration*
+	Minimum time, in seconds, a command must run for *command-finished*
+	to show a notification. Default: _5_.
+
 # SECTION: scrollback
 
 *lines*

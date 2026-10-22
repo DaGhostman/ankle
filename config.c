@@ -1460,6 +1460,19 @@ parse_section_desktop_notifications(struct context *ctx)
     else if (streq(key, "inhibit-when-focused"))
         return value_to_bool(
             ctx, &conf->desktop_notifications.inhibit_when_focused);
+    else if (streq(key, "command-finished")) {
+        _Static_assert(
+            sizeof(conf->desktop_notifications.command_finished) == sizeof(int),
+            "enum is not 32-bit");
+
+        return value_to_enum(
+            ctx,
+            (const char *[]){"never", "unfocused", "always", NULL},
+            (int *)&conf->desktop_notifications.command_finished);
+    }
+    else if (streq(key, "command-finished-min-duration"))
+        return value_to_uint32(
+            ctx, 10, &conf->desktop_notifications.command_finished_min_duration);
     else {
         LOG_CONTEXTUAL_ERR("not a valid option: %s", key);
         return false;
@@ -3857,6 +3870,8 @@ config_load(struct config *conf, const char *conf_path,
                 .argv = {.args = NULL},
             },
             .inhibit_when_focused = true,
+            .command_finished = COMMAND_FINISHED_NEVER,
+            .command_finished_min_duration = 5,
         },
 
         .tweak = {
