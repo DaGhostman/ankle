@@ -514,6 +514,40 @@ test_font_features(struct context *ctx)
 }
 
 static void
+test_font_size_presets(struct context *ctx, struct config *conf)
+{
+    ctx->key = "font-size-presets";
+
+    /* Sorted, separated by spaces and/or commas */
+    ctx->value = "14 9.5,20 ,  11";
+    if (!parse_section_main(ctx))
+        BUG("[main].font-size-presets=%s: failed to parse", ctx->value);
+    if (conf->font_size_presets.count != 4 ||
+        conf->font_size_presets.sizes[0] != 9.5f ||
+        conf->font_size_presets.sizes[1] != 11.f ||
+        conf->font_size_presets.sizes[2] != 14.f ||
+        conf->font_size_presets.sizes[3] != 20.f)
+    {
+        BUG("[main].font-size-presets=%s: wrong sizes", ctx->value);
+    }
+
+    /* Invalid values leave the current list as is */
+    static const char *const invalid[] = {"abc", "10 0", "-1", "10x", "12 1e9"};
+    for (size_t i = 0; i < ALEN(invalid); i++) {
+        ctx->value = invalid[i];
+        if (parse_section_main(ctx))
+            BUG("[main].font-size-presets=%s: did not fail to parse", ctx->value);
+        if (conf->font_size_presets.count != 4)
+            BUG("[main].font-size-presets=%s: modified the list", ctx->value);
+    }
+
+    /* Empty clears the list */
+    ctx->value = "";
+    if (!parse_section_main(ctx) || conf->font_size_presets.count != 0)
+        BUG("[main].font-size-presets=: did not clear the list");
+}
+
+static void
 test_unit_float(struct context *ctx, bool (*parse_fun)(struct context *ctx),
                 const char *key, const float *ptr)
 {
@@ -574,6 +608,8 @@ test_section_main(void)
     test_boolean(&ctx, &parse_section_main, "selection-clear-on-copy", &conf.selection_clear_on_copy);
     test_boolean(&ctx, &parse_section_main, "vi-mode", &conf.vi_mode);
     test_unit_float(&ctx, &parse_section_main, "dim-unfocused", &conf.dim_unfocused);
+    test_unit_float(&ctx, &parse_section_main, "alpha-adjustment", &conf.alpha_adjustment);
+    test_font_size_presets(&ctx, &conf);
     test_boolean(&ctx, &parse_section_main, "ligatures", &conf.ligatures.enabled);
     {
         ctx.key = "ligatures";

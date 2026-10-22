@@ -911,6 +911,14 @@ bool term_update_scale(struct terminal *term);
 bool term_font_size_increase(struct terminal *term);
 bool term_font_size_decrease(struct terminal *term);
 bool term_font_size_reset(struct terminal *term);
+bool term_font_size_preset(struct terminal *term, bool next);
+float term_font_size_preset_pick(
+    const float *presets, size_t count, float current, bool next);
+
+uint16_t term_alpha_step(uint16_t alpha, float step, bool increase);
+void term_alpha_set(struct terminal *term, uint16_t alpha);
+void term_alpha_adjust(struct terminal *term, bool increase);
+void term_alpha_reset(struct terminal *term);
 bool term_font_dpi_changed(struct terminal *term, float old_scale);
 void term_font_subpixel_changed(struct terminal *term);
 int term_font_baseline(const struct terminal *term);

@@ -2412,6 +2412,111 @@ term_font_size_reset(struct terminal *term)
     return load_fonts_from_conf(term);
 }
 
+float
+term_font_size_preset_pick(const float *presets, size_t count, float current,
+                           bool next)
+{
+    /* Sizes this close are considered the same */
+    const float epsilon = 0.01;
+
+    if (count == 0)
+        return -1.;
+
+    if (next) {
+        for (size_t i = 0; i < count; i++) {
+            if (presets[i] > current + epsilon)
+                return presets[i];
+        }
+        return presets[0];
+    } else {
+        for (size_t i = count; i > 0; i--) {
+            if (presets[i - 1] < current - epsilon)
+                return presets[i - 1];
+        }
+        return presets[count - 1];
+    }
+}
+
+bool
+term_font_size_preset(struct terminal *term, bool next)
+{
+    const struct config *conf = term->conf;
+    const float dpi = term->font_is_sized_by_dpi ? term->font_dpi : 96.;
+
+    if (conf->fonts[0].count == 0)
+        return false;
+
+    /* The primary font's size decides where in the list we are */
+    const struct config_font *primary = &term->font_sizes[0][0];
+    const float current = primary->px_size > 0
+        ? primary->px_size * 72. / dpi
+        : primary->pt_size;
+
+    const float target = term_font_size_preset_pick(
+        conf->font_size_presets.sizes, conf->font_size_presets.count,
+        current, next);
+
+    if (target <= 0. || current <= 0.)
+        return false;
+
+    /* Scale all fonts by the same amount, keeping their relative sizes */
+    const float ratio = target / current;
+
+    for (size_t i = 0; i < 4; i++) {
+        const struct config_font_list *font_list = &conf->fonts[i];
+
+        for (size_t j = 0; j < font_list->count; j++) {
+            struct config_font *font = &term->font_sizes[i][j];
+            const float pt_size = font->px_size > 0
+                ? font->px_size * 72. / dpi
+                : font->pt_size;
+
+            font->pt_size = pt_size * ratio;
+            font->px_size = -1;
+        }
+    }
+
+    return reload_fonts(term, true);
+}
+
+uint16_t
+term_alpha_step(uint16_t alpha, float step, bool increase)
+{
+    const int amount = (int)roundf(step * 0xffff);
+    const int new_alpha = increase ? alpha + amount : alpha - amount;
+    return min(max(new_alpha, 0), 0xffff);
+}
+
+void
+term_alpha_set(struct terminal *term, uint16_t alpha)
+{
+    if (term->colors.alpha == alpha)
+        return;
+
+    term->colors.alpha = alpha;
+
+    if (term->window != NULL) {
+        wayl_win_alpha_changed(term->window);
+        term_font_subpixel_changed(term);
+        term_damage_color(term, COLOR_DEFAULT, 0);
+        term_damage_margins(term);
+        render_refresh(term);
+    }
+}
+
+void
+term_alpha_adjust(struct terminal *term, bool increase)
+{
+    term_alpha_set(term, term_alpha_step(
+        term->colors.alpha, term->conf->alpha_adjustment, increase));
+}
+
+void
+term_alpha_reset(struct terminal *term)
+{
+    term_alpha_set(term, term_theme_get(term)->alpha);
+}
+
 bool
 term_fractional_scaling(const struct terminal *term)
 {
@@ -3029,6 +3134,80 @@ term_test_write(struct terminal *term, const char *text)
         }
     }
 }
+
+UNITTEST
+{
+    const float presets[] = {10., 14., 20.};
+
+    /* Next: the smallest preset larger than the current size, wrapping */
+    xassert(term_font_size_preset_pick(presets, 3, 8., true) == 10.);
+    xassert(term_font_size_preset_pick(presets, 3, 10., true) == 14.);
+    xassert(term_font_size_preset_pick(presets, 3, 12., true) == 14.);
+    xassert(term_font_size_preset_pick(presets, 3, 20., true) == 10.);
+    xassert(term_font_size_preset_pick(presets, 3, 30., true) == 10.);
+
+    /* Previous: the largest preset smaller than the current size, wrapping */
+    xassert(term_font_size_preset_pick(presets, 3, 30., false) == 20.);
+    xassert(term_font_size_preset_pick(presets, 3, 14., false) == 10.);
+    xassert(term_font_size_preset_pick(presets, 3, 12., false) == 10.);
+    xassert(term_font_size_preset_pick(presets, 3, 10., false) == 20.);
+
+    /* Rounding errors don't count as a different size */
+    xassert(term_font_size_preset_pick(presets, 3, 14.001, true) == 20.);
+    xassert(term_font_size_preset_pick(presets, 3, 13.999, false) == 10.);
+
+    /* No presets */
+    xassert(term_font_size_preset_pick(presets, 0, 12., true) < 0.);
+
+    /* Single preset */
+    xassert(term_font_size_preset_pick(presets, 1, 10., true) == 10.);
+    xassert(term_font_size_preset_pick(presets, 1, 10., false) == 10.);
+}
+
+UNITTEST
+{
+    xassert(term_alpha_step(0x8000, 0.1, true) == 0x8000 + 6554);
+    xassert(term_alpha_step(0x8000, 0.1, false) == 0x8000 - 6554);
+    xassert(term_alpha_step(0xffff, 0.1, true) == 0xffff);
+    xassert(term_alpha_step(0xff00, 0.1, true) == 0xffff);
+    xassert(term_alpha_step(0, 0.1, false) == 0);
+    xassert(term_alpha_step(100, 0.1, false) == 0);
+    xassert(term_alpha_step(0x1234, 0., true) == 0x1234);
+    xassert(term_alpha_step(0, 1., true) == 0xffff);
+}
+
+#if defined(_DEBUG)
+UNITTEST
+{
+    struct config conf = {
+        .alpha_adjustment = 0.25,
+        .colors_dark = {.alpha = 0xc000},
+    };
+    struct terminal term;
+    term_test_init(&term, &conf, 2, 4, 2);
+    term.colors.active_theme = COLOR_THEME_DARK;
+    term.colors.alpha = 0xffff;
+
+    term_alpha_adjust(&term, false);
+    xassert(term.colors.alpha == 0xffff - 16384);
+    term_alpha_adjust(&term, false);
+    term_alpha_adjust(&term, false);
+    term_alpha_adjust(&term, false);
+    term_alpha_adjust(&term, false);
+    xassert(term.colors.alpha == 0);
+    term_alpha_adjust(&term, true);
+    xassert(term.colors.alpha == 16384);
+
+    /* Reset goes back to the color theme's alpha */
+    term_alpha_reset(&term);
+    xassert(term.colors.alpha == 0xc000);
+
+    term_alpha_set(&term, 0x1234);
+    xassert(term.colors.alpha == 0x1234);
+
+    term_test_destroy(&term);
+}
+#endif
 
 UNITTEST
 {

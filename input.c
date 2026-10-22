@@ -228,6 +228,26 @@ execute_binding(struct seat *seat, struct terminal *term,
         term_font_size_reset(term);
         return true;
 
+    case BIND_ACTION_FONT_SIZE_PRESET_NEXT:
+        term_font_size_preset(term, true);
+        return true;
+
+    case BIND_ACTION_FONT_SIZE_PRESET_PREV:
+        term_font_size_preset(term, false);
+        return true;
+
+    case BIND_ACTION_ALPHA_INCREASE:
+        term_alpha_adjust(term, true);
+        return true;
+
+    case BIND_ACTION_ALPHA_DECREASE:
+        term_alpha_adjust(term, false);
+        return true;
+
+    case BIND_ACTION_ALPHA_RESET:
+        term_alpha_reset(term);
+        return true;
+
     case BIND_ACTION_SPAWN_TERMINAL:
         term_spawn_new(term);
         return true;
