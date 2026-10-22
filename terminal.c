@@ -2579,6 +2579,10 @@ term_config_reload(struct terminal *term, const struct config *conf)
     term->conf = conf;
     key_binding_unref(mgr, old);
 
+    /* Window already destroyed; terminal is shutting down */
+    if (term->window == NULL)
+        return;
+
     /* Colors; this discards colors changed with escape sequences */
     term_theme_apply(
         term, term->colors.active_theme == COLOR_THEME_DARK
