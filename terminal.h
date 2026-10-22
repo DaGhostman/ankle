@@ -644,6 +644,15 @@ struct terminal {
         size_t match_len;
 
         struct {
+            bool enabled;
+            bool compiled;  /* 'preg' holds a compiled 'pattern' */
+            char *pattern;  /* UTF-8 pattern 'preg' was compiled from */
+            regex_t preg;
+        } regex;
+
+        bool frozen;  /* Not reading client output while searching */
+
+        struct {
             char32_t *buf;
             size_t len;
         } last;
