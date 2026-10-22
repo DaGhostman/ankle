@@ -12,6 +12,7 @@
 #include "log.h"
 #include "base64.h"
 #include "config.h"
+#include "grid.h"
 #include "macros.h"
 #include "notify.h"
 #include "selection.h"
@@ -1681,6 +1682,14 @@ osc_dispatch(struct terminal *term)
                     term->grid->cursor.point.col);
             term->grid->cur_row->shell_integration.cmd_end = term->grid->cursor.point.col;
             break;
+
+        case 'L':
+            /* Fresh line; ensure the prompt starts on a new line */
+            LOG_DBG("FTCS_FRESH_LINE: %dx%d",
+                    term->grid->cursor.point.row,
+                    term->grid->cursor.point.col);
+            term_fresh_line(term);
+            break;
         }
         break;
 
@@ -1764,4 +1773,44 @@ osc_ensure_size(struct terminal *term, size_t required_size)
     term->vt.osc.data = new_data;
     term->vt.osc.size = new_size;
     return true;
+}
+
+#if defined(_DEBUG)
+static void
+osc_test_dispatch(struct terminal *term, const char *seq)
+{
+    const size_t len = strlen(seq);
+    term->vt.osc.data = (uint8_t *)xstrdup(seq);
+    term->vt.osc.size = len + 1;
+    term->vt.osc.idx = len;
+
+    osc_dispatch(term);
+
+    free(term->vt.osc.data);
+    term->vt.osc.data = NULL;
+    term->vt.osc.size = term->vt.osc.idx = 0;
+}
+#endif
+
+UNITTEST
+{
+    /* OSC 133;L - fresh line */
+    struct terminal term;
+    term_test_init(&term, NULL, 3, 10, 4);
+
+    osc_test_dispatch(&term, "133;L");
+    xassert(term.grid->cursor.point.row == 0);
+    xassert(term.grid->cursor.point.col == 0);
+
+    term_test_write(&term, "{\"a\":1}");
+    osc_test_dispatch(&term, "133;L");
+    xassert(term.grid->cursor.point.row == 1);
+    xassert(term.grid->cursor.point.col == 0);
+
+    /* The prompt marker that typically follows lands on the new line */
+    osc_test_dispatch(&term, "133;A");
+    xassert(!grid_row(term.grid, 0)->shell_integration.prompt_marker);
+    xassert(grid_row(term.grid, 1)->shell_integration.prompt_marker);
+
+    term_test_destroy(&term);
 }

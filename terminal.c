@@ -2888,6 +2888,128 @@ term_erase_scrollback(struct terminal *term)
     term_damage_view(term);
 }
 
+void
+term_fresh_line(struct terminal *term)
+{
+    /* OSC 133;L - move to the start of a new line, unless the
+     * cursor already is at the start of a line */
+    if (term->grid->cursor.point.col == 0 && !term->grid->cursor.lcf)
+        return;
+
+    term_carriage_return(term);
+    term_linefeed(term);
+}
+
+#if defined(_DEBUG)
+void
+term_test_init(struct terminal *term, const struct config *conf,
+               int rows, int cols, int scrollback_rows)
+{
+    xassert(rows <= scrollback_rows);
+    xassert((scrollback_rows & (scrollback_rows - 1)) == 0);
+
+    *term = (struct terminal){
+        .conf = conf,
+        .rows = rows,
+        .cols = cols,
+        .normal = {
+            .rows = xcalloc(scrollback_rows, sizeof(term->normal.rows[0])),
+            .num_rows = scrollback_rows,
+            .num_cols = cols,
+        },
+        .grid = &term->normal,
+        .scroll_region = {.start = 0, .end = rows},
+        .auto_margin = true,
+        .selection = {
+            .coords = {
+                .start = {-1, -1},
+                .end = {-1, -1},
+            },
+            .pivot = {
+                .start = {-1, -1},
+                .end = {-1, -1},
+            },
+            .kind = SELECTION_NONE,
+            .auto_scroll = {
+                .fd = -1,
+            },
+        },
+        .cursor_blink = {.fd = -1},
+        .visual_focus = true,
+        .kbd_focus = true,
+    };
+
+    for (int r = 0; r < rows; r++)
+        term->normal.rows[r] = grid_row_alloc(cols, true);
+    term->normal.cur_row = term->normal.rows[0];
+}
+
+void
+term_test_destroy(struct terminal *term)
+{
+    for (int r = 0; r < term->normal.num_rows; r++)
+        grid_row_free(term->normal.rows[r]);
+    free(term->normal.rows);
+    tll_free(term->normal.scroll_damage);
+    tll_free(term->normal.sixel_images);
+}
+
+void
+term_test_write(struct terminal *term, const char *text)
+{
+    /* Feed plain ASCII text, CR and LF to the terminal */
+    for (const char *p = text; *p != '\0'; p++) {
+        switch (*p) {
+        case '\r': term_carriage_return(term); break;
+        case '\n': term_linefeed(term); break;
+        default: term_print(term, (unsigned char)*p, 1, false); break;
+        }
+    }
+}
+#endif
+
+UNITTEST
+{
+    struct terminal term;
+    term_test_init(&term, NULL, 3, 4, 8);
+
+    /* At the start of a line: no-op */
+    term_fresh_line(&term);
+    xassert(term.grid->cursor.point.row == 0);
+    xassert(term.grid->cursor.point.col == 0);
+
+    /* Mid-line: moves to the start of the next line */
+    term_test_write(&term, "ab");
+    xassert(term.grid->cursor.point.col == 2);
+    term_fresh_line(&term);
+    xassert(term.grid->cursor.point.row == 1);
+    xassert(term.grid->cursor.point.col == 0);
+
+    /* Twice in a row is the same as once */
+    term_fresh_line(&term);
+    xassert(term.grid->cursor.point.row == 1);
+    xassert(term.grid->cursor.point.col == 0);
+
+    /* Line filled up to the last column (wrap pending) */
+    term_test_write(&term, "abcd");
+    xassert(term.grid->cursor.lcf);
+    xassert(term.grid->cursor.point.row == 1);
+    term_fresh_line(&term);
+    xassert(term.grid->cursor.point.row == 2);
+    xassert(term.grid->cursor.point.col == 0);
+    xassert(!term.grid->cursor.lcf);
+
+    /* On the last row: scrolls the screen */
+    term_test_write(&term, "xy");
+    term_fresh_line(&term);
+    xassert(term.grid->cursor.point.row == 2);
+    xassert(term.grid->cursor.point.col == 0);
+    xassert(grid_row(term.grid, 1)->cells[0].wc == 'x');
+    xassert(grid_row(term.grid, 2)->cells[0].wc == 0);
+
+    term_test_destroy(&term);
+}
+
 UNITTEST
 {
     const int scrollback_rows = 16;

@@ -104,6 +104,9 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   not an error ([foot#2449][foot-2449]).
 * `include` (and `include-optional`) accept paths relative to the
   directory of the including file ([foot#1713][foot-1713]).
+* `OSC 133;L` (fresh line), which moves the cursor to the start of a
+  new line, unless it already is at the start of a line
+  ([foot#2477][foot-2477]).
 
 ### Changed
 
@@ -151,6 +154,7 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-2400]: https://codeberg.org/dnkl/foot/issues/2400
 [foot-2449]: https://codeberg.org/dnkl/foot/issues/2449
 [foot-1713]: https://codeberg.org/dnkl/foot/issues/1713
+[foot-2477]: https://codeberg.org/dnkl/foot/issues/2477
 
 
 ## Unreleased

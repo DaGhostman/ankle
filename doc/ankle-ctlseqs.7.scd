@@ -790,6 +790,12 @@ All _OSC_ sequences begin with *\\E]*, sometimes abbreviated _OSC_.
 |  \\E] 133 ; D \\E\\ 
 :  FinalTerm
 :  Mark end of command output
+|  \\E] 133 ; L \\E\\ 
+:  FinalTerm
+:  Fresh line: if the cursor is not at the start of a line, move it to
+   the start of the next line. Typically emitted before the prompt, so
+   that it does not start in the middle of a line, after output
+   without a trailing newline.
 |  \\E] 176 ; _app-id_ \\E\\ 
 :  foot
 :  Set app ID. _app-id_ is optional; if assigned,
