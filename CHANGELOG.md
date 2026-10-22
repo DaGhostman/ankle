@@ -115,6 +115,13 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   caching the glyphs of shaped text runs), and statically linked.
 * HarfBuzz is now a required dependency, and meson >= 0.63 is
   required.
+* terminfo: `smm` and `rmm` only toggle private mode 1034 (8-bit
+  meta), like XTerm, and no longer touch mode 1036 (_"send ESC when
+  Meta modifies a key"_). ncurses applications, like vifm, emit `smm`,
+  which switched Alt to 8-bit meta characters and broke their Alt
+  bindings ([foot#2488][foot-2488]). This reverts foot's change for
+  [foot#1584][foot-1584]; disable mode 1036 explicitly
+  (`\E[?1036l`) to get 8-bit meta characters.
 
 ### Fixed
 
@@ -134,6 +141,8 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-2343]: https://codeberg.org/dnkl/foot/issues/2343
 [foot-2365]: https://codeberg.org/dnkl/foot/issues/2365
 [foot-2338]: https://codeberg.org/dnkl/foot/issues/2338
+[foot-2488]: https://codeberg.org/dnkl/foot/issues/2488
+[foot-1584]: https://codeberg.org/dnkl/foot/issues/1584
 
 
 ## Unreleased
