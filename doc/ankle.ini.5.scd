@@ -1663,7 +1663,37 @@ e.g. *search-start=none*.
 *spawn-terminal*
 	Spawns a new terminal. If the shell has been configured to emit
 	the OSC 7 escape sequence, the new terminal will start in the
-	current working directory. Default: _Control+Shift+n_.
+	current working directory.
+	
+	Optionally, a command to run in the new terminal, instead of the
+	shell, can be given in brackets, before the key combinations. Like
+	the *pipe-\** bindings, a binding with a command is added next to
+	the plain one; to use the default key combination for it, unbind
+	the plain one first:
+	
+	```
+	spawn-terminal=none
+	spawn-terminal=[distrobox enter] Control+Shift+n
+	```
+	
+	The new terminal is passed an XDG activation token (when the
+	compositor supports it), so that it is focused even when the
+	compositor prevents focus stealing. Default: _Control+Shift+n_.
+
+*exec*
+	Runs a command, given in brackets before the key combinations. Its
+	standard output and error are connected to the terminal, so it
+	can, for example, write escape sequences to it. Standard input is
+	_/dev/null_, so that it doesn't compete with the shell for
+	input. It runs in the current working directory (see
+	*spawn-terminal*), with ankle's environment (not the shell's).
+	There can be several *exec* bindings, with different commands.
+	
+	```
+	exec=[set-theme.sh dark] Control+Shift+F9
+	```
+	
+	Default: _none_.
 
 *minimize*
 	Minimizes the window. Default: _none_.

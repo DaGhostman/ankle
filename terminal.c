@@ -4418,23 +4418,245 @@ term_bell(struct terminal *term)
     }
 }
 
-bool
-term_spawn_new(const struct terminal *term)
+static char **
+argv_dup_append(char **argv, size_t *argc, const char *arg)
 {
-    char *argv[4];
-    int argc = 0;
-
-    argv[argc++] = term->foot_exe;
-    if (term->conf->conf_path != NULL) {
-        argv[argc++] = "--config";
-        argv[argc++] = term->conf->conf_path;
-    }
-    argv[argc] = NULL;
-
-    return spawn(
-        term->reaper, term->cwd, argv,
-        -1, -1, -1, NULL, NULL, NULL) >= 0;
+    argv = xreallocarray(argv, *argc + 2, sizeof(argv[0]));
+    argv[(*argc)++] = xstrdup(arg);
+    argv[*argc] = NULL;
+    return argv;
 }
+
+static void
+argv_free(char **argv)
+{
+    if (argv == NULL)
+        return;
+    for (char **arg = argv; *arg != NULL; arg++)
+        free(*arg);
+    free(argv);
+}
+
+/* Command line for a new terminal instance, optionally running 'cmd'
+ * instead of the shell */
+char **
+term_spawn_new_argv(const struct terminal *term, const struct argv *cmd)
+{
+    char **argv = NULL;
+    size_t argc = 0;
+
+    argv = argv_dup_append(argv, &argc, term->foot_exe);
+    if (term->conf->conf_path != NULL) {
+        argv = argv_dup_append(argv, &argc, "--config");
+        argv = argv_dup_append(argv, &argc, term->conf->conf_path);
+    }
+
+    if (cmd != NULL && cmd->args != NULL && cmd->args[0] != NULL) {
+        argv = argv_dup_append(argv, &argc, "--");
+        for (char **arg = cmd->args; *arg != NULL; arg++)
+            argv = argv_dup_append(argv, &argc, *arg);
+    }
+
+    return argv;
+}
+
+/* Runs 'argv' with stdout and stderr connected to the terminal (stdin
+ * is /dev/null, so that it doesn't compete with the shell for input) */
+static pid_t
+exec_on_terminal(struct terminal *term, char *const argv[],
+                 const char *xdg_activation_token)
+{
+    if (term->ptmx < 0)
+        return -1;
+
+    char pts_path[64];
+    if (ptsname_r(term->ptmx, pts_path, sizeof(pts_path)) != 0) {
+        LOG_ERRNO("failed to get the pseudo terminal's slave path");
+        return -1;
+    }
+
+    int pts = open(pts_path, O_RDWR | O_NOCTTY | O_CLOEXEC);
+    if (pts < 0) {
+        LOG_ERRNO("%s: failed to open", pts_path);
+        return -1;
+    }
+
+    int dev_null = open("/dev/null", O_RDONLY | O_CLOEXEC);
+    if (dev_null < 0) {
+        LOG_ERRNO("failed to open /dev/null");
+        close(pts);
+        return -1;
+    }
+
+    pid_t pid = spawn(
+        term->reaper, term->cwd, argv, dev_null, pts, pts,
+        NULL, NULL, xdg_activation_token);
+
+    close(dev_null);
+    close(pts);
+    return pid;
+}
+
+struct spawn_context {
+    struct terminal *term;
+    char **argv;
+    bool on_terminal;  /* exec: connect to our pseudo terminal */
+};
+
+static void
+spawn_with_token(const char *token, void *data)
+{
+    struct spawn_context *ctx = data;
+
+    if (ctx->on_terminal)
+        exec_on_terminal(ctx->term, ctx->argv, token);
+    else {
+        spawn(ctx->term->reaper, ctx->term->cwd, ctx->argv,
+              -1, -1, -1, NULL, NULL, token);
+    }
+
+    argv_free(ctx->argv);
+    free(ctx);
+}
+
+/*
+ * Spawns, after having requested an XDG activation token (so that the
+ * compositor gives focus to a window opened by the child), if
+ * possible.
+ */
+static void
+spawn_with_activation(struct terminal *term, struct seat *seat,
+                      uint32_t serial, char **argv, bool on_terminal)
+{
+    struct spawn_context *ctx = xmalloc(sizeof(*ctx));
+    *ctx = (struct spawn_context){
+        .term = term,
+        .argv = argv,
+        .on_terminal = on_terminal,
+    };
+
+    if (term->window != NULL &&
+        wayl_get_activation_token(
+            term->wl, seat, serial, term->window, &spawn_with_token, ctx))
+    {
+        /* Context free:d by callback */
+        return;
+    }
+
+    spawn_with_token(NULL, ctx);
+}
+
+void
+term_spawn_new(struct terminal *term, struct seat *seat, uint32_t serial,
+               const struct argv *cmd)
+{
+    spawn_with_activation(
+        term, seat, serial, term_spawn_new_argv(term, cmd), false);
+}
+
+void
+term_exec(struct terminal *term, struct seat *seat, uint32_t serial,
+          const struct argv *cmd)
+{
+    if (cmd == NULL || cmd->args == NULL || cmd->args[0] == NULL)
+        return;
+
+    char **argv = NULL;
+    size_t argc = 0;
+    for (char **arg = cmd->args; *arg != NULL; arg++)
+        argv = argv_dup_append(argv, &argc, *arg);
+
+    spawn_with_activation(term, seat, serial, argv, true);
+}
+
+#if defined(_DEBUG)
+#include <poll.h>
+
+UNITTEST
+{
+    struct config conf = {0};
+    struct terminal term = {.conf = &conf, .foot_exe = "/usr/bin/ankle"};
+
+    char **argv = term_spawn_new_argv(&term, NULL);
+    xassert(streq(argv[0], "/usr/bin/ankle"));
+    xassert(argv[1] == NULL);
+    argv_free(argv);
+
+    conf.conf_path = "/etc/ankle.ini";
+    char *args[] = {"distrobox", "enter", "my box", NULL};
+    argv = term_spawn_new_argv(&term, &(struct argv){.args = args});
+    xassert(streq(argv[0], "/usr/bin/ankle"));
+    xassert(streq(argv[1], "--config"));
+    xassert(streq(argv[2], "/etc/ankle.ini"));
+    xassert(streq(argv[3], "--"));
+    xassert(streq(argv[4], "distrobox"));
+    xassert(streq(argv[5], "enter"));
+    xassert(streq(argv[6], "my box"));
+    xassert(argv[7] == NULL);
+    argv_free(argv);
+
+    /* An empty command is the same as no command */
+    char *no_args[] = {NULL};
+    argv = term_spawn_new_argv(&term, &(struct argv){.args = no_args});
+    xassert(streq(argv[2], "/etc/ankle.ini"));
+    xassert(argv[3] == NULL);
+    argv_free(argv);
+}
+
+UNITTEST
+{
+    /* exec: the command's output goes to the terminal */
+    struct fdm *fdm = fdm_init();
+    xassert(fdm != NULL);
+    struct reaper *reaper = reaper_init(fdm);
+    xassert(reaper != NULL);
+
+    int ptmx = posix_openpt(O_RDWR | O_NOCTTY | O_CLOEXEC);
+    xassert(ptmx >= 0);
+    xassert(grantpt(ptmx) == 0);
+    xassert(unlockpt(ptmx) == 0);
+
+    /* Keep the slave open, so that output isn't lost when the child exits */
+    char pts_path[64];
+    xassert(ptsname_r(ptmx, pts_path, sizeof(pts_path)) == 0);
+    int pts = open(pts_path, O_RDWR | O_NOCTTY | O_CLOEXEC);
+    xassert(pts >= 0);
+
+    struct config conf = {0};
+    struct terminal term = {
+        .conf = &conf, .ptmx = ptmx, .reaper = reaper, .fdm = fdm};
+
+    char *args[] = {"sh", "-c", "read -r x || printf 'no-stdin:'; printf \"$0\"", "out", NULL};
+    pid_t pid = exec_on_terminal(&term, args, NULL);
+    xassert(pid > 0);
+
+    char buf[64] = {0};
+    size_t len = 0;
+    while (len < strlen("no-stdin:out")) {
+        struct pollfd pfd = {.fd = ptmx, .events = POLLIN};
+        xassert(poll(&pfd, 1, 5000) == 1);
+        ssize_t count = read(ptmx, &buf[len], sizeof(buf) - 1 - len);
+        xassert(count > 0);
+        len += count;
+    }
+    buf[len] = '\0';
+
+    /* stdin is /dev/null (EOF), stdout is the terminal */
+    xassert(streq(buf, "no-stdin:out"));
+
+    reaper_del(reaper, pid);
+    waitpid(pid, NULL, 0);
+
+    /* No pseudo terminal (e.g. "hold" mode) */
+    term.ptmx = -1;
+    xassert(exec_on_terminal(&term, args, NULL) < 0);
+
+    close(pts);
+    close(ptmx);
+    reaper_destroy(reaper);
+    fdm_destroy(fdm);
+}
+#endif
 
 void
 term_enable_app_sync_updates(struct terminal *term)

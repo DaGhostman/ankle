@@ -249,7 +249,14 @@ execute_binding(struct seat *seat, struct terminal *term,
         return true;
 
     case BIND_ACTION_SPAWN_TERMINAL:
-        term_spawn_new(term);
+        term_spawn_new(
+            term, seat, serial,
+            binding->aux->type == BINDING_AUX_PIPE ? &binding->aux->pipe : NULL);
+        return true;
+
+    case BIND_ACTION_EXEC:
+        if (binding->aux->type == BINDING_AUX_PIPE)
+            term_exec(term, seat, serial, &binding->aux->pipe);
         return true;
 
     case BIND_ACTION_MINIMIZE:

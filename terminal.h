@@ -1017,7 +1017,11 @@ void term_set_app_id(struct terminal *term, const char *app_id);
 const char *term_icon(const struct terminal *term);
 void term_flash(struct terminal *term, unsigned duration_ms);
 void term_bell(struct terminal *term);
-bool term_spawn_new(const struct terminal *term);
+void term_spawn_new(struct terminal *term, struct seat *seat, uint32_t serial,
+                    const struct argv *cmd);
+char **term_spawn_new_argv(const struct terminal *term, const struct argv *cmd);
+void term_exec(struct terminal *term, struct seat *seat, uint32_t serial,
+               const struct argv *cmd);
 
 void term_enable_app_sync_updates(struct terminal *term);
 void term_disable_app_sync_updates(struct terminal *term);
