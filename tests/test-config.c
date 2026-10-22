@@ -588,13 +588,185 @@ test_section_main(void)
         (int *)&conf.initial_color_theme);
 
     /* TODO: font (custom) */
-    /* TODO: include (custom) */
     /* TODO: bold-text-in-bright (enum/boolean) */
     /* TODO: pad (geometry + optional string)*/
     /* TODO: initial-window-size-pixels (geometry) */
     /* TODO: initial-window-size-chars (geometry) */
 
     config_free(&conf);
+}
+
+static void
+write_file(const char *dir, const char *name, const char *content)
+{
+    char *path = xstrjoin3(dir, "/", name);
+    FILE *f = fopen(path, "w");
+    if (f == NULL)
+        BUG("%s: failed to create: %s", path, strerror(errno));
+    fputs(content, f);
+    fclose(f);
+    free(path);
+}
+
+static bool
+source_files_contains(const struct config *conf, const char *path)
+{
+    tll_foreach(conf->source_files, it) {
+        if (streq(it->item, path))
+            return true;
+    }
+    return false;
+}
+
+static void
+test_include(void)
+{
+    char template[] = "/tmp/ankle-test-include-XXXXXX";
+    const char *dir = mkdtemp(template);
+    if (dir == NULL)
+        BUG("failed to create temporary directory: %s", strerror(errno));
+
+    char *sub_dir = xstrjoin(dir, "/sub");
+    if (mkdir(sub_dir, 0700) < 0)
+        BUG("%s: failed to create: %s", sub_dir, strerror(errno));
+
+    /* sub/theme.ini includes colors.ini, relative to sub/ */
+    write_file(dir, "sub/theme.ini", "title=from-theme\ninclude=colors.ini\n");
+    write_file(dir, "sub/colors.ini", "[colors-dark]\nforeground=123456\n");
+    write_file(dir, "absolute.ini", "app-id=from-absolute\n");
+
+    char *main_path = xstrjoin(dir, "/ankle.ini");
+    char *theme_path = xstrjoin(dir, "/sub/theme.ini");
+    char *colors_path = xstrjoin(dir, "/sub/colors.ini");
+    char *absolute_path = xstrjoin(dir, "/absolute.ini");
+    char *missing_path = xstrjoin(dir, "/missing.ini");
+
+    struct config conf = {0};
+    struct context ctx = {
+        .conf = &conf, .section = "main", .path = main_path,
+        .errors_are_fatal = true,
+    };
+
+    /* Relative include, resolved against the including file's
+     * directory, including nested relative includes */
+    ctx.key = "include";
+    ctx.value = "sub/theme.ini";
+    if (!parse_section_main(&ctx))
+        BUG("[main].include=sub/theme.ini: failed to parse");
+    if (conf.title == NULL || !streq(conf.title, "from-theme"))
+        BUG("[main].include=sub/theme.ini: file not imported");
+    if (conf.colors_dark.fg != 0x123456)
+        BUG("[main].include=sub/theme.ini: nested relative include not imported");
+    if (!source_files_contains(&conf, theme_path) ||
+        !source_files_contains(&conf, colors_path))
+    {
+        BUG("[main].include=sub/theme.ini: included files not tracked");
+    }
+
+    /* Absolute include */
+    ctx.value = absolute_path;
+    if (!parse_section_main(&ctx) ||
+        conf.app_id == NULL || !streq(conf.app_id, "from-absolute"))
+    {
+        BUG("[main].include=%s: failed to import", absolute_path);
+    }
+
+    /* ~/ is expanded to $HOME */
+    const char *old_home = getenv("HOME");
+    char *saved_home = old_home != NULL ? xstrdup(old_home) : NULL;
+    setenv("HOME", dir, 1);
+    free(conf.app_id);
+    conf.app_id = NULL;
+    ctx.value = "~/absolute.ini";
+    if (!parse_section_main(&ctx) ||
+        conf.app_id == NULL || !streq(conf.app_id, "from-absolute"))
+    {
+        BUG("[main].include=~/absolute.ini: failed to import");
+    }
+    if (saved_home != NULL)
+        setenv("HOME", saved_home, 1);
+    else
+        unsetenv("HOME");
+    free(saved_home);
+
+    /* A missing file is an error for 'include'... */
+    ctx.value = "missing.ini";
+    if (parse_section_main(&ctx))
+        BUG("[main].include=missing.ini: did not fail");
+
+    /* ...but not for 'include-optional', which still tracks it (so
+     * that creating it triggers a reload) */
+    ctx.key = "include-optional";
+    tll_free_and_free(conf.source_files, free);
+    if (!parse_section_main(&ctx))
+        BUG("[main].include-optional=missing.ini: failed");
+    if (!source_files_contains(&conf, missing_path))
+        BUG("[main].include-optional=missing.ini: not tracked");
+
+    /* 'include-optional' imports the file when it does exist */
+    free(conf.title);
+    conf.title = NULL;
+    ctx.value = "sub/theme.ini";
+    if (!parse_section_main(&ctx) ||
+        conf.title == NULL || !streq(conf.title, "from-theme"))
+    {
+        BUG("[main].include-optional=sub/theme.ini: failed to import");
+    }
+
+    /* 'include-optional' still fails on errors other than a missing
+     * file, e.g. a directory... */
+    ctx.value = "sub/theme.ini/nope";
+    if (parse_section_main(&ctx))
+        BUG("[main].include-optional=sub/theme.ini/nope: did not fail");
+
+    /* ...and on errors inside the included file */
+    write_file(dir, "broken.ini", "no-such-option=yes\n");
+    ctx.value = "broken.ini";
+    if (parse_section_main(&ctx))
+        BUG("[main].include-optional=broken.ini: did not fail");
+
+    /* Relative paths are rejected in command line overrides */
+    ctx.key = "include";
+    ctx.value = "sub/theme.ini";
+    ctx.path = "override";
+    ctx.is_override = true;
+    if (parse_section_main(&ctx))
+        BUG("[main].include=sub/theme.ini: relative path accepted in override");
+
+    /* A relative including path (e.g. --config=ankle.ini) resolves
+     * against the current working directory */
+    ctx.is_override = false;
+    ctx.path = "ankle.ini";
+    char *expanded = include_path_expand(&ctx, "theme.ini");
+    if (expanded == NULL || !streq(expanded, "theme.ini"))
+        BUG("include_path_expand(): unexpected result: %s", expanded);
+    free(expanded);
+
+    ctx.path = "conf/ankle.ini";
+    expanded = include_path_expand(&ctx, "theme.ini");
+    if (expanded == NULL || !streq(expanded, "conf/theme.ini"))
+        BUG("include_path_expand(): unexpected result: %s", expanded);
+    free(expanded);
+
+    config_free(&conf);
+
+    const char *files[] = {
+        "sub/theme.ini", "sub/colors.ini", "absolute.ini", "broken.ini",
+    };
+    for (size_t i = 0; i < ALEN(files); i++) {
+        char *path = xstrjoin3(dir, "/", files[i]);
+        unlink(path);
+        free(path);
+    }
+    rmdir(sub_dir);
+    rmdir(dir);
+
+    free(sub_dir);
+    free(main_path);
+    free(theme_path);
+    free(colors_path);
+    free(absolute_path);
+    free(missing_path);
 }
 
 static void
@@ -1589,6 +1761,7 @@ main(int argc, const char *const *argv)
     FcInit();
     log_init(LOG_COLORIZE_AUTO, false, 0, LOG_CLASS_ERROR);
     test_section_main();
+    test_include();
     test_section_security();
     test_section_bell();
     test_section_desktop_notifications();

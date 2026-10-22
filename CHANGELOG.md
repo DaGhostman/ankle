@@ -100,6 +100,10 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   binding. Works in server mode too. A configuration with errors is
   not applied; a desktop notification describes the error instead.
 * `opaque-fullscreen` option.
+* `include-optional` option, like `include`, but a missing file is
+  not an error ([foot#2449][foot-2449]).
+* `include` (and `include-optional`) accept paths relative to the
+  directory of the including file ([foot#1713][foot-1713]).
 
 ### Changed
 
@@ -145,6 +149,8 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-pr-2480]: https://codeberg.org/dnkl/foot/pulls/2480
 [foot-2487]: https://codeberg.org/dnkl/foot/issues/2487
 [foot-2400]: https://codeberg.org/dnkl/foot/issues/2400
+[foot-2449]: https://codeberg.org/dnkl/foot/issues/2449
+[foot-1713]: https://codeberg.org/dnkl/foot/issues/1713
 
 
 ## Unreleased
