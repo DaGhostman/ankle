@@ -132,12 +132,16 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 * The view not being reset to the bottom, and the selection not being
   cancelled, when typing with an input method (patch from foot PR
   [#2480][foot-pr-2480]).
+* Crash when an output changes, or is removed, while a terminal is
+  shutting down ([foot#2487][foot-2487]). The same race could also
+  crash a configuration reload, or a drag-and-drop.
 
 [foot-2372]: https://codeberg.org/dnkl/foot/issues/2372
 [foot-2343]: https://codeberg.org/dnkl/foot/issues/2343
 [foot-2365]: https://codeberg.org/dnkl/foot/issues/2365
 [foot-2338]: https://codeberg.org/dnkl/foot/issues/2338
 [foot-pr-2480]: https://codeberg.org/dnkl/foot/pulls/2480
+[foot-2487]: https://codeberg.org/dnkl/foot/issues/2487
 
 
 ## Unreleased
