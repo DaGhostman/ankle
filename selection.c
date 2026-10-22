@@ -1596,6 +1596,8 @@ selection_finalize(struct seat *seat, struct terminal *term, uint32_t serial)
     term->selection.coords.start.row &= (term->grid->num_rows - 1);
     term->selection.coords.end.row &= (term->grid->num_rows - 1);
 
+    bool copied_to_clipboard = false;
+
     switch (term->conf->selection_target) {
     case SELECTION_TARGET_NONE:
         break;
@@ -1605,13 +1607,18 @@ selection_finalize(struct seat *seat, struct terminal *term, uint32_t serial)
         break;
     case SELECTION_TARGET_CLIPBOARD:
         selection_to_clipboard(seat, term, serial);
+        copied_to_clipboard = true;
         break;
 
     case SELECTION_TARGET_BOTH:
         selection_to_primary(seat, term, serial);
         selection_to_clipboard(seat, term, serial);
+        copied_to_clipboard = true;
         break;
     }
+
+    if (copied_to_clipboard && term->conf->selection_clear_on_copy)
+        selection_cancel(term);
 }
 
 static bool

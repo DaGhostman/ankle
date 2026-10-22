@@ -188,6 +188,9 @@ static const char *const binding_action_map[] = {
     [BIND_ACTION_THEME_SWITCH_LIGHT] = "color-theme-switch-light",
     [BIND_ACTION_THEME_TOGGLE] = "color-theme-toggle",
     [BIND_ACTION_CONFIG_RELOAD] = "config-reload",
+    [BIND_ACTION_CLEAR_SCROLLBACK] = "clear-scrollback",
+    [BIND_ACTION_CLEAR_TO_PROMPT] = "clear-to-prompt",
+    [BIND_ACTION_CLIPBOARD_COPY_OR_CANCEL] = "clipboard-copy-or-cancel",
 
     /* Mouse-specific actions */
     [BIND_ACTION_SCROLLBACK_UP_MOUSE] = "scrollback-up-mouse",
@@ -1315,6 +1318,9 @@ parse_section_main(struct context *ctx)
             (const char *[]){"none", "primary", "clipboard", "both", NULL},
             (int *)&conf->selection_target);
     }
+
+    else if (streq(key, "selection-clear-on-copy"))
+        return value_to_bool(ctx, &conf->selection_clear_on_copy);
 
     else if (streq(key, "box-drawings-uses-font-glyphs"))
         return value_to_bool(ctx, &conf->box_drawings_uses_font_glyphs);

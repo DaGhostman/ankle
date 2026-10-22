@@ -446,6 +446,7 @@ struct config {
         SELECTION_TARGET_CLIPBOARD,
         SELECTION_TARGET_BOTH
     } selection_target;
+    bool selection_clear_on_copy;
 
     struct {
         struct config_spawn_template command;

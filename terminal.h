@@ -904,6 +904,7 @@ void term_erase(
     int end_row, int end_col);
 void term_erase_scrollback(struct terminal *term);
 void term_fresh_line(struct terminal *term);
+void term_clear_to_prompt(struct terminal *term);
 
 int term_row_rel_to_abs(const struct terminal *term, int row);
 void term_cursor_home(struct terminal *term);

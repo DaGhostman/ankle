@@ -107,6 +107,17 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 * `OSC 133;L` (fresh line), which moves the cursor to the start of a
   new line, unless it already is at the start of a line
   ([foot#2477][foot-2477]).
+* `clear-scrollback` and `clear-to-prompt` key bindings (unbound by
+  default). The first erases the scrollback history; the second also
+  moves the current prompt (or, while a command is running, the
+  cursor's line) to the top of the window, erasing everything above
+  it ([foot#1030][foot-1030]).
+* `clipboard-copy-or-cancel` key binding (unbound by default). Copies
+  the selection to the clipboard, and clears it; without a selection,
+  the key is passed on to the application. Meant to be bound to
+  `Control+c` ([foot#1333][foot-1333]).
+* `selection-clear-on-copy` option, clearing the selection once it has
+  been copied to the clipboard ([foot#340][foot-340]).
 
 ### Changed
 
@@ -155,6 +166,9 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-2449]: https://codeberg.org/dnkl/foot/issues/2449
 [foot-1713]: https://codeberg.org/dnkl/foot/issues/1713
 [foot-2477]: https://codeberg.org/dnkl/foot/issues/2477
+[foot-1030]: https://codeberg.org/dnkl/foot/issues/1030
+[foot-1333]: https://codeberg.org/dnkl/foot/issues/1333
+[foot-340]: https://codeberg.org/dnkl/foot/issues/340
 
 
 ## Unreleased

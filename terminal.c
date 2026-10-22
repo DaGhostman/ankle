@@ -2900,6 +2900,55 @@ term_fresh_line(struct terminal *term)
     term_linefeed(term);
 }
 
+void
+term_clear_to_prompt(struct terminal *term)
+{
+    /*
+     * Moves the current prompt to the top of the screen, and erases
+     * everything above it, including the scrollback.
+     *
+     * The prompt is the last row marked with OSC 133;A, at, or
+     * above, the cursor. If a command has been started since (OSC
+     * 133;C), or there's no prompt marker on the screen, the
+     * cursor's row is used instead; we don't want to erase the
+     * output of a running command, only what was there before.
+     */
+    xassert(term->grid == &term->normal);
+
+    struct grid *grid = term->grid;
+    const int cursor_row = grid->cursor.point.row;
+    int top = cursor_row;
+
+    for (int r = cursor_row; r >= 0; r--) {
+        const struct row *row = grid_row(grid, r);
+
+        if (row->shell_integration.cmd_start >= 0)
+            break;
+
+        if (row->shell_integration.prompt_marker) {
+            top = r;
+            break;
+        }
+    }
+
+    term_reset_view(term);
+
+    if (top > 0) {
+        const bool lcf = grid->cursor.lcf;
+        const int col = grid->cursor.point.col;
+
+        term_scroll_partial(
+            term, (struct scroll_region){.start = 0, .end = term->rows}, top);
+
+        grid->cursor.point.row = cursor_row - top;
+        grid->cursor.point.col = col;
+        grid->cursor.lcf = lcf;
+        grid->cur_row = grid_row(grid, grid->cursor.point.row);
+    }
+
+    term_erase_scrollback(term);
+}
+
 #if defined(_DEBUG)
 void
 term_test_init(struct terminal *term, const struct config *conf,
@@ -3006,6 +3055,114 @@ UNITTEST
     xassert(term.grid->cursor.point.col == 0);
     xassert(grid_row(term.grid, 1)->cells[0].wc == 'x');
     xassert(grid_row(term.grid, 2)->cells[0].wc == 0);
+
+    term_test_destroy(&term);
+}
+
+static bool
+term_test_row_is(struct terminal *term, int row, const char *text)
+{
+    const struct row *r = grid_row(term->grid, row);
+    for (int c = 0; c < term->cols; c++) {
+        const char32_t expected = *text != '\0' ? (unsigned char)*text++ : 0;
+        if (r->cells[c].wc != expected)
+            return false;
+    }
+    return true;
+}
+
+static int
+term_test_scrollback_count(const struct terminal *term)
+{
+    int count = 0;
+    for (int r = 0; r < term->normal.num_rows; r++) {
+        if (term->normal.rows[r] != NULL)
+            count++;
+    }
+    return count - term->rows;
+}
+
+UNITTEST
+{
+    /* clear-to-prompt: prompt marker on screen */
+    struct terminal term;
+    term_test_init(&term, NULL, 4, 6, 16);
+
+    term_test_write(&term, "1\r\n2\r\n3\r\n4\r\n5\r\nold\r\n");
+    grid_row(term.grid, term.grid->cursor.point.row)->shell_integration.prompt_marker = true;
+    term_test_write(&term, "$ ls\r\n");
+    grid_row(term.grid, term.grid->cursor.point.row)->shell_integration.prompt_marker = true;
+    term_test_write(&term, "$ ab");
+
+    /* Screen: "5", "old", "$ ls", "$ ab" - last prompt on row 3 */
+    xassert(term_test_scrollback_count(&term) > 0);
+    xassert(term.grid->cursor.point.row == 3);
+    xassert(term_test_row_is(&term, 2, "$ ls"));
+    xassert(term_test_row_is(&term, 3, "$ ab"));
+
+    term_clear_to_prompt(&term);
+
+    xassert(term_test_scrollback_count(&term) == 0);
+    xassert(term.grid->cursor.point.row == 0);
+    xassert(term.grid->cursor.point.col == 4);
+    xassert(term_test_row_is(&term, 0, "$ ab"));
+    xassert(term_test_row_is(&term, 1, ""));
+    xassert(term.grid->cur_row == grid_row(term.grid, 0));
+
+    /* Typing continues on the prompt row */
+    term_test_write(&term, "c");
+    xassert(term_test_row_is(&term, 0, "$ abc"));
+
+    term_test_destroy(&term);
+}
+
+UNITTEST
+{
+    /* clear-to-prompt: running command - keep the cursor row, not
+     * the prompt (we don't erase the command's output up to the
+     * prompt, only everything above the cursor) */
+    struct terminal term;
+    term_test_init(&term, NULL, 4, 6, 16);
+
+    grid_row(term.grid, 0)->shell_integration.prompt_marker = true;
+    term_test_write(&term, "$ tail\r\n");
+    grid_row(term.grid, 1)->shell_integration.cmd_start = 0;
+    term_test_write(&term, "log1\r\nlog2\r\nlog");
+
+    xassert(term.grid->cursor.point.row == 3);
+    term_clear_to_prompt(&term);
+
+    xassert(term.grid->cursor.point.row == 0);
+    xassert(term.grid->cursor.point.col == 3);
+    xassert(term_test_row_is(&term, 0, "log"));
+    xassert(term_test_row_is(&term, 1, ""));
+    xassert(term_test_scrollback_count(&term) == 0);
+
+    term_test_destroy(&term);
+}
+
+UNITTEST
+{
+    /* clear-to-prompt: no shell integration; cursor row on top,
+     * pending wrap preserved */
+    struct terminal term;
+    term_test_init(&term, NULL, 3, 4, 8);
+
+    term_test_write(&term, "a\r\nb\r\nwxyz");
+    xassert(term.grid->cursor.lcf);
+
+    term_clear_to_prompt(&term);
+    xassert(term.grid->cursor.point.row == 0);
+    xassert(term.grid->cursor.point.col == 3);
+    xassert(term.grid->cursor.lcf);
+    xassert(term_test_row_is(&term, 0, "wxyz"));
+    xassert(term_test_row_is(&term, 1, ""));
+    xassert(term_test_row_is(&term, 2, ""));
+
+    /* Cursor already on the first row: only the scrollback is erased */
+    term_clear_to_prompt(&term);
+    xassert(term.grid->cursor.point.row == 0);
+    xassert(term_test_row_is(&term, 0, "wxyz"));
 
     term_test_destroy(&term);
 }

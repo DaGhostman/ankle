@@ -610,6 +610,13 @@ re-applied on top of the reloaded configuration.
 	Clipboard target to automatically copy selected text to. One of
 	*none*, *primary*, *clipboard* or *both*. Default: _primary_.
 
+*selection-clear-on-copy*
+	Boolean. When enabled, the selection is cleared once it has been
+	copied to the clipboard; either with the *clipboard-copy* key
+	binding, or, when *selection-target* is *clipboard* or *both*,
+	when the selection is finished. Copying to the primary selection
+	only does not clear the selection. Default: _no_.
+
 *workers*
 	Number of threads to use for rendering. Set to 0 to disable
 	multithreading. Default: the number of available logical CPUs
@@ -1499,6 +1506,15 @@ e.g. *search-start=none*.
 	Copies the current selection into the _clipboard_. Default: _Control+Shift+c_
 	_XF86Copy_.
 
+*clipboard-copy-or-cancel*
+	If there is a selection, copies it into the _clipboard_, and
+	clears the selection. If there is no selection, the key is passed
+	on to the application, as if it was not bound. Intended to be
+	bound to *Control+c*, to copy with the same key as in other
+	applications, while still being able to interrupt programs. Note
+	that *Control+c* is bound to nothing else by default. Default:
+	_none_.
+
 *clipboard-paste*
 	Pastes from the _clipboard_. Default: _Control+Shift+v_ _XF86Paste_.
 
@@ -1655,6 +1671,25 @@ e.g. *search-start=none*.
 *config-reload*
 	Reload the configuration (see *RELOADING*). Useful when
 	*auto-reload-config* is disabled. Default: _none_.
+
+*clear-scrollback*
+	Erases the scrollback history. The screen itself is not
+	touched. Only applies to the normal screen; on the alternate
+	screen (used by e.g. editors and pagers), the key is passed on
+	to the application. Default: _none_.
+
+*clear-to-prompt*
+	Moves the current shell prompt to the top of the window, and
+	erases everything above it, including the scrollback history.
+	
+	The prompt is found with shell integration (see *prompt-prev*);
+	it is the last prompt at, or above, the cursor. If a command is
+	running, or there is no prompt marker on the screen, the cursor's
+	line is moved to the top instead, so that the output of a running
+	command (e.g. *tail -f*) is not erased from that line on.
+	
+	Only applies to the normal screen; on the alternate screen, the
+	key is passed on to the application. Default: _none_.
 
 *quit*
 	Quit ankle. Default: _none_.
