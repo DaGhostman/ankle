@@ -129,11 +129,15 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   rectangles ([foot#2338][foot-2338]).
 * Out-of-bounds read when the compositor sends an empty keymap (patch
   from foot).
+* The view not being reset to the bottom, and the selection not being
+  cancelled, when typing with an input method (patch from foot PR
+  [#2480][foot-pr-2480]).
 
 [foot-2372]: https://codeberg.org/dnkl/foot/issues/2372
 [foot-2343]: https://codeberg.org/dnkl/foot/issues/2343
 [foot-2365]: https://codeberg.org/dnkl/foot/issues/2365
 [foot-2338]: https://codeberg.org/dnkl/foot/issues/2338
+[foot-pr-2480]: https://codeberg.org/dnkl/foot/pulls/2480
 
 
 ## Unreleased
