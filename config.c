@@ -191,6 +191,7 @@ static const char *const binding_action_map[] = {
     [BIND_ACTION_CLEAR_SCROLLBACK] = "clear-scrollback",
     [BIND_ACTION_CLEAR_TO_PROMPT] = "clear-to-prompt",
     [BIND_ACTION_CLIPBOARD_COPY_OR_CANCEL] = "clipboard-copy-or-cancel",
+    [BIND_ACTION_VI_MODE_START] = "vi-mode-start",
 
     /* Mouse-specific actions */
     [BIND_ACTION_SCROLLBACK_UP_MOUSE] = "scrollback-up-mouse",
@@ -250,12 +251,50 @@ static const char *const url_binding_action_map[] = {
     [BIND_ACTION_URL_TOGGLE_URL_ON_JUMP_LABEL] = "toggle-url-visible",
 };
 
+static const char *const vi_binding_action_map[] = {
+    [BIND_ACTION_VI_NONE] = NULL,
+    [BIND_ACTION_VI_CANCEL] = "cancel",
+    [BIND_ACTION_VI_EXIT] = "exit",
+    [BIND_ACTION_VI_LEFT] = "left",
+    [BIND_ACTION_VI_DOWN] = "down",
+    [BIND_ACTION_VI_UP] = "up",
+    [BIND_ACTION_VI_RIGHT] = "right",
+    [BIND_ACTION_VI_WORD_FORWARD] = "word-forward",
+    [BIND_ACTION_VI_WORD_BACKWARD] = "word-backward",
+    [BIND_ACTION_VI_WORD_END] = "word-end",
+    [BIND_ACTION_VI_BIG_WORD_FORWARD] = "big-word-forward",
+    [BIND_ACTION_VI_BIG_WORD_BACKWARD] = "big-word-backward",
+    [BIND_ACTION_VI_BIG_WORD_END] = "big-word-end",
+    [BIND_ACTION_VI_LINE_START] = "line-start",
+    [BIND_ACTION_VI_LINE_FIRST_NON_BLANK] = "line-first-non-blank",
+    [BIND_ACTION_VI_LINE_END] = "line-end",
+    [BIND_ACTION_VI_SCREEN_TOP] = "screen-top",
+    [BIND_ACTION_VI_SCREEN_MIDDLE] = "screen-middle",
+    [BIND_ACTION_VI_SCREEN_BOTTOM] = "screen-bottom",
+    [BIND_ACTION_VI_SCROLLBACK_TOP] = "scrollback-top",
+    [BIND_ACTION_VI_SCROLLBACK_BOTTOM] = "scrollback-bottom",
+    [BIND_ACTION_VI_PAGE_UP] = "page-up",
+    [BIND_ACTION_VI_PAGE_DOWN] = "page-down",
+    [BIND_ACTION_VI_HALF_PAGE_UP] = "half-page-up",
+    [BIND_ACTION_VI_HALF_PAGE_DOWN] = "half-page-down",
+    [BIND_ACTION_VI_SCROLL_UP] = "scroll-up",
+    [BIND_ACTION_VI_SCROLL_DOWN] = "scroll-down",
+    [BIND_ACTION_VI_PROMPT_PREV] = "prompt-prev",
+    [BIND_ACTION_VI_PROMPT_NEXT] = "prompt-next",
+    [BIND_ACTION_VI_VISUAL] = "visual",
+    [BIND_ACTION_VI_VISUAL_LINE] = "visual-line",
+    [BIND_ACTION_VI_VISUAL_BLOCK] = "visual-block",
+    [BIND_ACTION_VI_YANK] = "yank",
+};
+
 static_assert(ALEN(binding_action_map) == BIND_ACTION_COUNT,
               "binding action map size mismatch");
 static_assert(ALEN(search_binding_action_map) == BIND_ACTION_SEARCH_COUNT,
               "search binding action map size mismatch");
 static_assert(ALEN(url_binding_action_map) == BIND_ACTION_URL_COUNT,
               "URL binding action map size mismatch");
+static_assert(ALEN(vi_binding_action_map) == BIND_ACTION_VI_COUNT,
+              "vi binding action map size mismatch");
 
 struct context {
     struct config *conf;
@@ -1321,6 +1360,9 @@ parse_section_main(struct context *ctx)
 
     else if (streq(key, "selection-clear-on-copy"))
         return value_to_bool(ctx, &conf->selection_clear_on_copy);
+
+    else if (streq(key, "vi-mode"))
+        return value_to_bool(ctx, &conf->vi_mode);
 
     else if (streq(key, "dim-unfocused")) {
         float amount;
@@ -2767,6 +2809,15 @@ parse_section_url_bindings(struct context *ctx)
         &ctx->conf->bindings.url);
 }
 
+static bool
+parse_section_vi_bindings(struct context *ctx)
+{
+    return parse_key_binding_section(
+        ctx,
+        BIND_ACTION_VI_COUNT, vi_binding_action_map,
+        &ctx->conf->bindings.vi);
+}
+
 static bool NOINLINE
 resolve_key_binding_collisions(struct config *conf, const char *section_name,
                                const char *const action_map[],
@@ -3325,6 +3376,7 @@ enum section {
     SECTION_KEY_BINDINGS,
     SECTION_SEARCH_BINDINGS,
     SECTION_URL_BINDINGS,
+    SECTION_VI_BINDINGS,
     SECTION_MOUSE_BINDINGS,
     SECTION_TEXT_BINDINGS,
     SECTION_ENVIRONMENT,
@@ -3357,6 +3409,7 @@ static const struct {
     [SECTION_KEY_BINDINGS] =    {&parse_section_key_bindings, "key-bindings"},
     [SECTION_SEARCH_BINDINGS] = {&parse_section_search_bindings, "search-bindings"},
     [SECTION_URL_BINDINGS] =    {&parse_section_url_bindings, "url-bindings"},
+    [SECTION_VI_BINDINGS] =     {&parse_section_vi_bindings, "vi-bindings"},
     [SECTION_MOUSE_BINDINGS] =  {&parse_section_mouse_bindings, "mouse-bindings"},
     [SECTION_TEXT_BINDINGS] =   {&parse_section_text_bindings, "text-bindings"},
     [SECTION_ENVIRONMENT] =     {&parse_section_environment, "environment"},
@@ -3684,6 +3737,96 @@ add_default_url_bindings(struct config *conf)
 }
 
 static void
+add_default_vi_bindings(struct config *conf)
+{
+    const struct config_key_binding bindings[] = {
+        {BIND_ACTION_VI_CANCEL, m("none"), {{XKB_KEY_Escape}}},
+        {BIND_ACTION_VI_CANCEL, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_c}}},
+        {BIND_ACTION_VI_CANCEL, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_g}}},
+        {BIND_ACTION_VI_CANCEL, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_bracketleft}}},
+        {BIND_ACTION_VI_EXIT, m("none"), {{XKB_KEY_q}}},
+        {BIND_ACTION_VI_EXIT, m("none"), {{XKB_KEY_i}}},
+        {BIND_ACTION_VI_LEFT, m("none"), {{XKB_KEY_h}}},
+        {BIND_ACTION_VI_LEFT, m("none"), {{XKB_KEY_Left}}},
+        {BIND_ACTION_VI_DOWN, m("none"), {{XKB_KEY_j}}},
+        {BIND_ACTION_VI_DOWN, m("none"), {{XKB_KEY_Down}}},
+        {BIND_ACTION_VI_UP, m("none"), {{XKB_KEY_k}}},
+        {BIND_ACTION_VI_UP, m("none"), {{XKB_KEY_Up}}},
+        {BIND_ACTION_VI_RIGHT, m("none"), {{XKB_KEY_l}}},
+        {BIND_ACTION_VI_RIGHT, m("none"), {{XKB_KEY_Right}}},
+        {BIND_ACTION_VI_WORD_FORWARD, m("none"), {{XKB_KEY_w}}},
+        {BIND_ACTION_VI_WORD_BACKWARD, m("none"), {{XKB_KEY_b}}},
+        {BIND_ACTION_VI_WORD_END, m("none"), {{XKB_KEY_e}}},
+        {BIND_ACTION_VI_BIG_WORD_FORWARD, m("none"), {{XKB_KEY_W}}},
+        {BIND_ACTION_VI_BIG_WORD_BACKWARD, m("none"), {{XKB_KEY_B}}},
+        {BIND_ACTION_VI_BIG_WORD_END, m("none"), {{XKB_KEY_E}}},
+        {BIND_ACTION_VI_LINE_START, m("none"), {{XKB_KEY_0}}},
+        {BIND_ACTION_VI_LINE_START, m("none"), {{XKB_KEY_Home}}},
+        {BIND_ACTION_VI_LINE_FIRST_NON_BLANK, m("none"), {{XKB_KEY_asciicircum}}},
+        {BIND_ACTION_VI_LINE_END, m("none"), {{XKB_KEY_dollar}}},
+        {BIND_ACTION_VI_LINE_END, m("none"), {{XKB_KEY_End}}},
+        {BIND_ACTION_VI_SCREEN_TOP, m("none"), {{XKB_KEY_H}}},
+        {BIND_ACTION_VI_SCREEN_MIDDLE, m("none"), {{XKB_KEY_M}}},
+        {BIND_ACTION_VI_SCREEN_BOTTOM, m("none"), {{XKB_KEY_L}}},
+        {BIND_ACTION_VI_SCROLLBACK_TOP, m("none"), {{XKB_KEY_g}}},
+        {BIND_ACTION_VI_SCROLLBACK_BOTTOM, m("none"), {{XKB_KEY_G}}},
+        {BIND_ACTION_VI_PAGE_UP, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_b}}},
+        {BIND_ACTION_VI_PAGE_UP, m("none"), {{XKB_KEY_Prior}}},
+        {BIND_ACTION_VI_PAGE_DOWN, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_f}}},
+        {BIND_ACTION_VI_PAGE_DOWN, m("none"), {{XKB_KEY_Next}}},
+        {BIND_ACTION_VI_HALF_PAGE_UP, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_u}}},
+        {BIND_ACTION_VI_HALF_PAGE_DOWN, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_d}}},
+        {BIND_ACTION_VI_SCROLL_UP, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_y}}},
+        {BIND_ACTION_VI_SCROLL_DOWN, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_e}}},
+        {BIND_ACTION_VI_PROMPT_PREV, m("none"), {{XKB_KEY_bracketleft}}},
+        {BIND_ACTION_VI_PROMPT_NEXT, m("none"), {{XKB_KEY_bracketright}}},
+        {BIND_ACTION_VI_VISUAL, m("none"), {{XKB_KEY_v}}},
+        {BIND_ACTION_VI_VISUAL_LINE, m("none"), {{XKB_KEY_V}}},
+        {BIND_ACTION_VI_VISUAL_BLOCK, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_v}}},
+        {BIND_ACTION_VI_YANK, m("none"), {{XKB_KEY_y}}},
+    };
+
+    conf->bindings.vi.count = ALEN(bindings);
+    conf->bindings.vi.arr = xmemdup(bindings, sizeof(bindings));
+}
+
+/*
+ * vi-mode-start has no default binding unless vi mode is enabled;
+ * adding one unconditionally would turn existing user bindings of the
+ * same key combination into collisions. Only added if the user hasn't
+ * bound vi-mode-start, and the combination is still free.
+ */
+static void
+add_default_vi_mode_start_binding(struct config *conf)
+{
+    if (!conf->vi_mode)
+        return;
+
+    struct config_key_binding_list *bindings = &conf->bindings.key;
+    const xkb_keysym_t sym = XKB_KEY_space;
+    config_modifier_list_t mods = m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT);
+
+    for (size_t i = 0; i < bindings->count; i++) {
+        const struct config_key_binding *b = &bindings->arr[i];
+
+        if (b->action == BIND_ACTION_VI_MODE_START ||
+            (b->k.sym == sym && modifiers_equal(&b->modifiers, &mods)))
+        {
+            tll_free_and_free(mods, free);
+            return;
+        }
+    }
+
+    bindings->arr = xreallocarray(
+        bindings->arr, bindings->count + 1, sizeof(bindings->arr[0]));
+    bindings->arr[bindings->count++] = (struct config_key_binding){
+        .action = BIND_ACTION_VI_MODE_START,
+        .modifiers = mods,
+        .k = {.sym = sym},
+    };
+}
+
+static void
 add_default_mouse_bindings(struct config *conf)
 {
     const struct config_key_binding bindings[] = {
@@ -3938,6 +4081,7 @@ config_load(struct config *conf, const char *conf_path,
     add_default_key_bindings(conf);
     add_default_search_bindings(conf);
     add_default_url_bindings(conf);
+    add_default_vi_bindings(conf);
     add_default_mouse_bindings(conf);
 
     struct config_file conf_file = {.path = NULL, .fd = -1};
@@ -4000,6 +4144,8 @@ config_load(struct config *conf, const char *conf_path,
         xassert(conf->bindings.search.arr[i].action != BIND_ACTION_SEARCH_NONE);
     for (size_t i = 0; i < conf->bindings.url.count; i++)
         xassert(conf->bindings.url.arr[i].action != BIND_ACTION_URL_NONE);
+    for (size_t i = 0; i < conf->bindings.vi.count; i++)
+        xassert(conf->bindings.vi.arr[i].action != BIND_ACTION_VI_NONE);
 #endif
 
     free(conf_file.path);
@@ -4072,6 +4218,8 @@ config_override_apply(struct config *conf, config_override_t *overrides,
     conf->csd.border_width = max(
         min_csd_border_width, conf->csd.border_width_visible);
 
+    add_default_vi_mode_start_binding(conf);
+
     return
         resolve_key_binding_collisions(
             conf, section_info[SECTION_KEY_BINDINGS].name,
@@ -4082,6 +4230,9 @@ config_override_apply(struct config *conf, config_override_t *overrides,
         resolve_key_binding_collisions(
             conf, section_info[SECTION_URL_BINDINGS].name,
             url_binding_action_map, &conf->bindings.url, KEY_BINDING) &&
+        resolve_key_binding_collisions(
+            conf, section_info[SECTION_VI_BINDINGS].name,
+            vi_binding_action_map, &conf->bindings.vi, KEY_BINDING) &&
         resolve_key_binding_collisions(
             conf, section_info[SECTION_MOUSE_BINDINGS].name,
             binding_action_map, &conf->bindings.mouse, MOUSE_BINDING);
@@ -4261,6 +4412,7 @@ config_clone(const struct config *old)
     key_binding_list_clone(&conf->bindings.key, &old->bindings.key);
     key_binding_list_clone(&conf->bindings.search, &old->bindings.search);
     key_binding_list_clone(&conf->bindings.url, &old->bindings.url);
+    key_binding_list_clone(&conf->bindings.vi, &old->bindings.vi);
     key_binding_list_clone(&conf->bindings.mouse, &old->bindings.mouse);
 
     conf->env_vars.length = 0;
@@ -4357,6 +4509,7 @@ config_free(struct config *conf)
     free_key_binding_list(&conf->bindings.key);
     free_key_binding_list(&conf->bindings.search);
     free_key_binding_list(&conf->bindings.url);
+    free_key_binding_list(&conf->bindings.vi);
     free_key_binding_list(&conf->bindings.mouse);
     tll_free_and_free(conf->mouse.selection_override_modifiers, free);
 

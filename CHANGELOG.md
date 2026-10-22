@@ -125,6 +125,13 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   showing a notification when a long running shell command finishes,
   using shell integration (`OSC 133;C` and `OSC 133;D`)
   ([foot#2390][foot-2390]).
+* Vi mode (disabled by default; enable with `vi-mode=yes`): a
+  keyboard driven cursor for moving through the scrollback, with
+  vi-like motions and counts, and character-wise, line-wise and block
+  selections that can be copied to the clipboard. Entered with the
+  new `vi-mode-start` key binding (`Control+Shift+space` when vi mode
+  is enabled), and configured in the new `[vi-bindings]` section
+  ([foot#419][foot-419]).
 
 ### Changed
 
@@ -178,6 +185,7 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-340]: https://codeberg.org/dnkl/foot/issues/340
 [foot-2330]: https://codeberg.org/dnkl/foot/issues/2330
 [foot-2390]: https://codeberg.org/dnkl/foot/issues/2390
+[foot-419]: https://codeberg.org/dnkl/foot/issues/419
 
 
 ## Unreleased

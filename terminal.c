@@ -44,6 +44,7 @@
 #include "spawn.h"
 #include "url-mode.h"
 #include "util.h"
+#include "vimode.h"
 #include "vt.h"
 #include "xmalloc.h"
 #include "xsnprintf.h"
@@ -2188,6 +2189,8 @@ term_reset(struct terminal *term, bool hard)
     term->vt = (struct vt){
         .state = 0,     /* STATE_GROUND */
     };
+
+    vimode_cancel(term);
 
     if (term->grid == &term->alt) {
         term->grid = &term->normal;

@@ -623,6 +623,16 @@ re-applied on top of the reloaded configuration.
 	
 	_0.0_ disables dimming. Default: _0.0_.
 
+*vi-mode*
+	Boolean. Enables vi mode: a keyboard driven cursor for moving
+	through the scrollback, and selecting and copying text, without
+	the mouse (see the *vi-bindings* section). Vi mode is entered with
+	the *vi-mode-start* key binding, which defaults to
+	_Control+Shift+space_ when this option is enabled (unless that key
+	combination is already bound to something else).
+	
+	Default: _no_.
+
 *selection-clear-on-copy*
 	Boolean. When enabled, the selection is cleared once it has been
 	copied to the clipboard; either with the *clipboard-copy* key
@@ -1703,6 +1713,12 @@ e.g. *search-start=none*.
 	Reload the configuration (see *RELOADING*). Useful when
 	*auto-reload-config* is disabled. Default: _none_.
 
+*vi-mode-start*
+	Enters vi mode (see the *vi-bindings* section). Only works when
+	*vi-mode* is enabled; otherwise the key is passed on to the
+	application. Default: _Control+Shift+space_ if *vi-mode* is
+	enabled, otherwise _none_.
+
 *clear-scrollback*
 	Erases the scrollback history. The screen itself is not
 	touched. Only applies to the normal screen; on the alternate
@@ -1887,6 +1903,122 @@ Be careful; do not use single-letter keys that are also used in
 	label.
 	
 	Default: _t_.
+
+# SECTION: vi-bindings
+
+This section lets you override the default key bindings used in vi
+mode (see *vi-mode* in the *main* section, and *vi-mode-start* in
+*key-bindings*). The syntax is exactly the same as the regular
+*key-bindings*.
+
+In vi mode, a cursor moves through the scrollback and the screen
+with vi-like motions, and text can be selected and copied without
+using the mouse. Keys are never sent to the application while in vi
+mode; unbound keys are ignored.
+
+Motions can be prefixed with a count, e.g. *5j* moves down five rows.
+The count is typed with the digit keys (*0* is part of the count
+only after another digit; on its own, it is *line-start*).
+
+Terminal output keeps being processed in vi mode. Vi mode is exited
+when the window is resized, and when the application switches
+between the normal and alternate screen.
+
+*cancel*
+	Leaves visual mode. Outside visual mode, exits vi mode. Default: _Escape Control+c Control+g Control+bracketleft_.
+
+*exit*
+	Exits vi mode (clearing any visual mode selection). Default: _q i_.
+
+*left*
+	Moves the cursor one character left. Default: _h Left_.
+
+*down*
+	Moves the cursor one row down. Default: _j Down_.
+
+*up*
+	Moves the cursor one row up. Default: _k Up_.
+
+*right*
+	Moves the cursor one character right. Default: _l Right_.
+
+*word-forward*
+	Moves the cursor to the start of the next word. A word is a sequence of letters, digits and underscores, or a sequence of other non-blank characters. Default: _w_.
+
+*word-backward*
+	Moves the cursor to the start of the previous word. Default: _b_.
+
+*word-end*
+	Moves the cursor to the end of the word. Default: _e_.
+
+*big-word-forward*
+	Moves the cursor to the start of the next WORD (a sequence of non-blank characters). Default: _W_.
+
+*big-word-backward*
+	Moves the cursor to the start of the previous WORD. Default: _B_.
+
+*big-word-end*
+	Moves the cursor to the end of the WORD. Default: _E_.
+
+*line-start*
+	Moves the cursor to the first column. Default: _0 Home_.
+
+*line-first-non-blank*
+	Moves the cursor to the first non-blank character on the row. Default: _asciicircum_.
+
+*line-end*
+	Moves the cursor to the last character on the row. Default: _dollar End_.
+
+*screen-top*
+	Moves the cursor to the top row of the window. Default: _H_.
+
+*screen-middle*
+	Moves the cursor to the middle row of the window. Default: _M_.
+
+*screen-bottom*
+	Moves the cursor to the bottom row of the window. Default: _L_.
+
+*scrollback-top*
+	Moves the cursor to the first row of the scrollback. Default: _g_.
+
+*scrollback-bottom*
+	Moves the cursor to the last row of the screen. Default: _G_.
+
+*page-up*
+	Scrolls one page up, moving the cursor along. Default: _Control+b Prior_.
+
+*page-down*
+	Scrolls one page down, moving the cursor along. Default: _Control+f Next_.
+
+*half-page-up*
+	Scrolls half a page up, moving the cursor along. Default: _Control+u_.
+
+*half-page-down*
+	Scrolls half a page down, moving the cursor along. Default: _Control+d_.
+
+*scroll-up*
+	Scrolls one row up. The cursor stays where it is, unless it would end up outside the window. Default: _Control+y_.
+
+*scroll-down*
+	Scrolls one row down. The cursor stays where it is, unless it would end up outside the window. Default: _Control+e_.
+
+*prompt-prev*
+	Moves the cursor to the previous shell prompt. Requires shell integration (see *prompt-prev* in *key-bindings*). Default: _bracketleft_.
+
+*prompt-next*
+	Moves the cursor to the next shell prompt. Requires shell integration. Default: _bracketright_.
+
+*visual*
+	Starts (or stops) a character-wise selection, from the cursor. Default: _v_.
+
+*visual-line*
+	Starts (or stops) a line-wise selection. Soft wrapped lines are selected in full. Default: _V_.
+
+*visual-block*
+	Starts (or stops) a block (rectangular) selection. Default: _Control+v_.
+
+*yank*
+	Copies the selection to the clipboard, and leaves visual mode. Default: _y_.
 
 # SECTION: text-bindings
 
