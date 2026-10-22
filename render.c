@@ -36,6 +36,7 @@
 #include "grid.h"
 #include "ime.h"
 #include "input.h"
+#include "paste.h"
 #include "quirks.h"
 #include "search.h"
 #include "selection.h"
@@ -2345,7 +2346,7 @@ render_overlay(struct terminal *term)
     const enum overlay_style style =
         term->is_searching ? OVERLAY_SEARCH :
         term->flash.active ? OVERLAY_FLASH :
-        unicode_mode_active ? OVERLAY_UNICODE_MODE :
+        (unicode_mode_active || term->paste_confirm.active) ? OVERLAY_UNICODE_MODE :
         OVERLAY_NONE;
 
     if (likely(style == OVERLAY_NONE)) {
@@ -3524,6 +3525,56 @@ render_scrollback_position(struct terminal *term)
 }
 
 static void
+render_paste_prompt(struct terminal *term)
+{
+    struct wl_window *win = term->window;
+    struct wayl_sub_surface *surf = &win->paste_prompt;
+
+    if (likely(!term->paste_confirm.active)) {
+        if (unlikely(surf->surface.surf != NULL))
+            wayl_win_subsurface_destroy(surf);
+        return;
+    }
+
+    if (surf->surface.surf == NULL) {
+        if (!wayl_win_subsurface_new(win, surf, false)) {
+            LOG_ERR("failed to create paste confirmation surface");
+            return;
+        }
+    }
+
+    char prompt[128];
+    paste_confirm_prompt(term, prompt, sizeof(prompt));
+
+    char32_t text[128];
+    mbstoc32(text, prompt, ALEN(text));
+
+    const float scale = term->scale;
+    const int cell_count = c32len(text);
+    const int margin = (int)roundf(6. * scale);
+
+    int width = margin + cell_count * term->cell_width + margin;
+    int height = margin + term->cell_height + margin;
+
+    width = roundf(scale * ceilf(width / scale));
+    height = roundf(scale * ceilf(height / scale));
+
+    int x = max(0, (term->width - width) / 2);
+    int y = max(0, (term->height - height) / 2);
+
+    struct buffer_chain *chain = term->render.chains.paste_prompt;
+    struct buffer *buf = shm_get_buffer(chain, width, height);
+
+    wl_subsurface_set_position(
+        surf->sub, roundf(x / scale), roundf(y / scale));
+
+    render_osd(
+        term, surf, term->fonts[0], buf, text,
+        term->colors.table[0], 0xffu << 24 | term->colors.table[8 + 3],
+        margin);
+}
+
+static void
 render_render_timer(struct terminal *term, struct timespec render_time)
 {
     struct wl_window *win = term->window;
@@ -4041,6 +4092,7 @@ grid_render(struct terminal *term)
     render_overlay(term);
     render_ime_preedit(term, buf);
     render_scrollback_position(term);
+    render_paste_prompt(term);
 
     if (term->conf->tweak.render_timer != RENDER_TIMER_NONE) {
         struct timespec end_time;

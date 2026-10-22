@@ -132,6 +132,11 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   new `vi-mode-start` key binding (`Control+Shift+space` when vi mode
   is enabled), and configured in the new `[vi-bindings]` section
   ([foot#419][foot-419]).
+* Paste protection: `[security].paste-protection` asks for
+  confirmation before pasting text containing line breaks, either
+  only when the application hasn't enabled bracketed paste
+  (`unbracketed`), or always (`always`). Disabled by default
+  ([foot#308][foot-308]).
 
 ### Changed
 
@@ -186,6 +191,7 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-2330]: https://codeberg.org/dnkl/foot/issues/2330
 [foot-2390]: https://codeberg.org/dnkl/foot/issues/2390
 [foot-419]: https://codeberg.org/dnkl/foot/issues/419
+[foot-308]: https://codeberg.org/dnkl/foot/issues/308
 
 
 ## Unreleased

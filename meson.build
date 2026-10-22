@@ -335,6 +335,7 @@ executable(
   'key-binding.c', 'key-binding.h',
   'main.c',
   'notify.c', 'notify.h',
+  'paste.c', 'paste.h',
   'quirks.c', 'quirks.h',
   'reaper.c', 'reaper.h',
   'reload.c', 'reload.h',

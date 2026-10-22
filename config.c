@@ -1454,6 +1454,13 @@ parse_section_security(struct context *ctx)
             ctx,
             (const char *[]){"disabled", "copy-enabled", "paste-enabled", "enabled", NULL},
             (int *)&conf->security.osc52);
+    } else if (streq(key, "paste-protection")) {
+        _Static_assert(sizeof(conf->security.paste_protection) == sizeof(int),
+                       "enum is not 32-bit");
+        return value_to_enum(
+            ctx,
+            (const char *[]){"never", "unbracketed", "always", NULL},
+            (int *)&conf->security.paste_protection);
     } else {
         LOG_CONTEXTUAL_ERR("not a valid option: %s", key);
         return false;
@@ -3922,6 +3929,7 @@ config_load(struct config *conf, const char *conf_path,
         .uppercase_regex_insert = true,
         .security = {
             .osc52 = OSC52_ENABLED,
+            .paste_protection = PASTE_PROTECTION_NEVER,
         },
         .bell = {
             .urgent = false,
