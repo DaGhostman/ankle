@@ -403,6 +403,10 @@ term_ptmx_resume(struct terminal *term)
 {
     if (term->ptmx < 0)
         return false;
+    if (term->search.frozen) {
+        /* Resumed when the scrollback search ends */
+        return true;
+    }
     return fdm_event_add(term->fdm, term->ptmx, EPOLLIN);
 }
 
@@ -1941,6 +1945,9 @@ term_destroy(struct terminal *term)
 
     free(term->search.buf);
     free(term->search.last.buf);
+    if (term->search.regex.compiled)
+        regfree(&term->search.regex.preg);
+    free(term->search.regex.pattern);
 
     if (term->render.workers.threads != NULL) {
         for (size_t i = 0; i < term->render.workers.count; i++) {

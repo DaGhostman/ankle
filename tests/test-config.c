@@ -890,6 +890,8 @@ test_section_scrollback(void)
     test_uint32(&ctx, &parse_section_scrollback, "lines",
                 &conf.scrollback.lines);
     test_float(&ctx, parse_section_scrollback, "multiplier", &conf.scrollback.multiplier);
+    test_boolean(&ctx, &parse_section_scrollback, "search-regex", &conf.scrollback.search_regex);
+    test_boolean(&ctx, &parse_section_scrollback, "search-freeze", &conf.scrollback.search_freeze);
 
     test_enum(
         &ctx, &parse_section_scrollback, "indicator-position",

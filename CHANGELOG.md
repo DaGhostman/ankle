@@ -137,6 +137,13 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   only when the application hasn't enabled bracketed paste
   (`unbracketed`), or always (`always`). Disabled by default
   ([foot#308][foot-308]).
+* Regex scrollback search: `[scrollback].search-regex` starts searches
+  in regex mode (POSIX extended regular expressions, matched per
+  line), and the new `toggle-regex` search binding switches modes
+  during a search ([foot#1447][foot-1447]).
+* `[scrollback].search-freeze`: stop reading client output while in
+  scrollback search mode, so that the content doesn't change
+  underneath the search ([foot#646][foot-646]).
 
 ### Changed
 
@@ -192,6 +199,8 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-2390]: https://codeberg.org/dnkl/foot/issues/2390
 [foot-419]: https://codeberg.org/dnkl/foot/issues/419
 [foot-308]: https://codeberg.org/dnkl/foot/issues/308
+[foot-1447]: https://codeberg.org/dnkl/foot/issues/1447
+[foot-646]: https://codeberg.org/dnkl/foot/issues/646
 
 
 ## Unreleased

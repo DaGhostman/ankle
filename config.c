@@ -243,6 +243,7 @@ static const char *const search_binding_action_map[] = {
     [BIND_ACTION_SEARCH_CLIPBOARD_PASTE] = "clipboard-paste",
     [BIND_ACTION_SEARCH_PRIMARY_PASTE] = "primary-paste",
     [BIND_ACTION_SEARCH_UNICODE_INPUT] = "unicode-input",
+    [BIND_ACTION_SEARCH_TOGGLE_REGEX] = "toggle-regex",
 };
 
 static const char *const url_binding_action_map[] = {
@@ -1564,6 +1565,12 @@ parse_section_scrollback(struct context *ctx)
 
     else if (streq(key, "multiplier"))
         return value_to_float(ctx, &conf->scrollback.multiplier);
+
+    else if (streq(key, "search-regex"))
+        return value_to_bool(ctx, &conf->scrollback.search_regex);
+
+    else if (streq(key, "search-freeze"))
+        return value_to_bool(ctx, &conf->scrollback.search_freeze);
 
     else {
         LOG_CONTEXTUAL_ERR("not a valid option: %s", key);

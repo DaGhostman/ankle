@@ -336,6 +336,11 @@ These shortcuts affect scrolling in scrollback-search mode:
 *shift*+*page-down*
 	Scroll down/forward one page in history.
 
+The search string can also be a regular expression; see *search-regex*
+and the *toggle-regex* search binding in *ankle.ini*(5). With
+*search-freeze*, output from the client application is not read while
+searching, so the scrollback doesn't change underneath the search.
+
 ## VI MODE
 
 Disabled by default; see *vi-mode* and *vi-bindings* in *ankle.ini*(5).

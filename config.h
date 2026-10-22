@@ -361,6 +361,8 @@ struct config {
             char32_t *text;
         } indicator;
         float multiplier;
+        bool search_regex;   /* Start searches in regex mode */
+        bool search_freeze;  /* Stop reading client output while searching */
     } scrollback;
 
     struct {

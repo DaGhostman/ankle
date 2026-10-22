@@ -17,6 +17,7 @@ void search_add_chars(struct terminal *term, const char *text, size_t len);
 void search_find_next(struct terminal *term, enum search_direction direction);
 
 void search_selection_cancelled(struct terminal *term);
+void search_regex_free(struct terminal *term);
 
 struct search_match_iterator {
     struct terminal *term;

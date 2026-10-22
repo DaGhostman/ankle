@@ -1,6 +1,8 @@
 #include "search.h"
 
+#include <regex.h>
 #include <string.h>
+#include <uchar.h>
 
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon-compose.h>
@@ -96,6 +98,41 @@ has_wrapped_around_right(const struct terminal *term, int abs_row_no)
     return rebased_row == 0;
 }
 
+void
+search_regex_free(struct terminal *term)
+{
+    if (term->search.regex.compiled)
+        regfree(&term->search.regex.preg);
+    free(term->search.regex.pattern);
+    term->search.regex.pattern = NULL;
+    term->search.regex.compiled = false;
+}
+
+static void
+search_freeze(struct terminal *term)
+{
+    if (term->search.frozen)
+        return;
+
+    LOG_DBG("search: freezing client output");
+    term_ptmx_pause(term);
+    term->search.frozen = true;
+}
+
+static void
+search_unfreeze(struct terminal *term)
+{
+    if (!term->search.frozen)
+        return;
+
+    LOG_DBG("search: un-freezing client output");
+    term->search.frozen = false;
+
+    /* An interactive resize resumes reading when it's done */
+    if (term->interactive_resizing.grid == NULL)
+        term_ptmx_resume(term);
+}
+
 static void
 search_cancel_keep_selection(struct terminal *term)
 {
@@ -117,6 +154,10 @@ search_cancel_keep_selection(struct terminal *term)
     term->search.match_len = 0;
     term->is_searching = false;
     term->render.search_glyph_offset = 0;
+
+    search_regex_free(term);
+    term->search.regex.enabled = false;
+    search_unfreeze(term);
 
     /* Reset IME state */
     if (term_ime_is_enabled(term)) {
@@ -156,6 +197,10 @@ search_begin(struct terminal *term)
     term->search.sz = 64;
     term->search.buf = xmalloc(term->search.sz * sizeof(term->search.buf[0]));
     term->search.buf[0] = U'\0';
+
+    term->search.regex.enabled = term->conf->scrollback.search_regex;
+    if (term->conf->scrollback.search_freeze)
+        search_freeze(term);
 
     term_xcursor_update(term);
     render_refresh_search(term);
@@ -304,10 +349,378 @@ matches_cell(const struct terminal *term, const struct cell *cell, size_t search
     return composed != NULL ? composed->count : 1;
 }
 
+/*
+ * Regex search
+ *
+ * The scrollback is matched one logical line at a time; i.e. rows
+ * joined across soft line wraps. Each line is converted to UTF-8,
+ * with a map from byte offsets back to cells.
+ */
+
+struct regex_line {
+    int first_sb_row;   /* Scrollback relative */
+    int last_sb_row;    /* Scrollback relative */
+
+    char *text;
+    size_t len;
+    size_t size;
+    int *cells;         /* Cell index (row offset * cols + col) of each byte */
+};
+
+static bool
+regex_compile(struct terminal *term)
+{
+    char *pattern = ac32tombs(term->search.buf);
+    if (pattern == NULL)
+        return false;
+
+    if (term->search.regex.pattern != NULL &&
+        streq(pattern, term->search.regex.pattern))
+    {
+        free(pattern);
+        return term->search.regex.compiled;
+    }
+
+    search_regex_free(term);
+    term->search.regex.pattern = pattern;
+
+    /* Like the literal search: case sensitive only with upper case letters */
+    int flags = REG_EXTENDED;
+    if (!hasc32upper(term->search.buf))
+        flags |= REG_ICASE;
+
+    int r = regcomp(&term->search.regex.preg, pattern, flags);
+    term->search.regex.compiled = r == 0;
+
+    if (r != 0)
+        LOG_DBG("search: invalid regex: %s", pattern);
+
+    return term->search.regex.compiled;
+}
+
+static const struct row *
+row_sb(const struct terminal *term, int sb_row)
+{
+    const struct grid *grid = term->grid;
+    return grid->rows[grid_row_sb_to_abs(grid, term->rows, sb_row)];
+}
+
+static void
+regex_line_append(struct regex_line *line, const char *bytes, size_t count,
+                  int cell)
+{
+    if (line->len + count + 1 > line->size) {
+        size_t new_size = line->size > 0 ? line->size * 2 : 256;
+        while (new_size < line->len + count + 1)
+            new_size *= 2;
+
+        line->text = xrealloc(line->text, new_size);
+        line->cells = xreallocarray(line->cells, new_size, sizeof(line->cells[0]));
+        line->size = new_size;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        line->text[line->len] = bytes[i];
+        line->cells[line->len] = cell;
+        line->len++;
+    }
+}
+
+static void
+regex_line_append_char(struct regex_line *line, char32_t wc, int cell)
+{
+    char utf8[MB_LEN_MAX];
+    size_t count = c32rtomb(utf8, wc, &(mbstate_t){0});
+
+    if (count == (size_t)-1) {
+        utf8[0] = '?';
+        count = 1;
+    }
+
+    regex_line_append(line, utf8, count, cell);
+}
+
+/* Extracts the logical line containing the scrollback relative row
+ * 'sb_row'. Returns false if the row isn't allocated */
+static bool
+regex_line_extract(const struct terminal *term, int sb_row,
+                   struct regex_line *line)
+{
+    const int last_sb = term->grid->num_rows - 1;
+
+    if (row_sb(term, sb_row) == NULL)
+        return false;
+
+    int first = sb_row;
+    while (first > 0) {
+        const struct row *prev = row_sb(term, first - 1);
+        if (prev == NULL || prev->linebreak)
+            break;
+        first--;
+    }
+
+    int last = sb_row;
+    while (last < last_sb) {
+        const struct row *row = row_sb(term, last);
+        if (row->linebreak || row_sb(term, last + 1) == NULL)
+            break;
+        last++;
+    }
+
+    line->first_sb_row = first;
+    line->last_sb_row = last;
+    line->len = 0;
+
+    /* Length (in bytes) up to, and including, the last non-empty cell */
+    size_t content_len = 0;
+
+    for (int r = first; r <= last; r++) {
+        const struct row *row = row_sb(term, r);
+
+        for (int c = 0; c < term->cols; c++) {
+            const int cell_idx = (r - first) * term->cols + c;
+            char32_t wc = row->cells[c].wc;
+
+            if (wc >= CELL_SPACER)
+                continue;
+
+            if (wc == 0) {
+                regex_line_append(line, " ", 1, cell_idx);
+                continue;
+            }
+
+            if (wc >= CELL_COMB_CHARS_LO && wc <= CELL_COMB_CHARS_HI) {
+                const struct composed *composed =
+                    composed_lookup(term->composed, wc - CELL_COMB_CHARS_LO);
+                for (size_t i = 0; i < composed->count; i++)
+                    regex_line_append_char(line, composed->chars[i], cell_idx);
+            } else
+                regex_line_append_char(line, wc, cell_idx);
+
+            content_len = line->len;
+        }
+    }
+
+    /* Trailing empty cells aren't part of the line */
+    line->len = content_len;
+
+    if (line->size == 0)
+        regex_line_append(line, "", 0, 0);
+    line->text[line->len] = '\0';
+    return true;
+}
+
+static int
+regex_line_pos(const struct terminal *term, const struct regex_line *line,
+               size_t byte_ofs)
+{
+    /* Linear, scrollback relative, cell position */
+    return line->first_sb_row * term->cols + line->cells[byte_ofs];
+}
+
+/*
+ * Finds the match in 'line' whose start is closest to 'start' (in
+ * 'direction'), within 'limit' cells. 'start' and the returned
+ * position are linear, scrollback relative, cell positions.
+ *
+ * Returns the distance of the best match, or -1 if there's no match.
+ */
+static long
+regex_line_best_match(const struct terminal *term, const regex_t *preg,
+                      const struct regex_line *line, bool backward,
+                      long start, long limit, long *match_start,
+                      long *match_end)
+{
+    const long total = (long)term->grid->num_rows * term->cols;
+    long best = -1;
+
+    for (size_t ofs = 0; ofs <= line->len;) {
+        regmatch_t m;
+        if (regexec(preg, &line->text[ofs], 1, &m,
+                    ofs > 0 ? REG_NOTBOL : 0) != 0)
+        {
+            break;
+        }
+
+        const size_t so = ofs + m.rm_so;
+        const size_t eo = ofs + m.rm_eo;
+
+        if (eo == so) {
+            /* Ignore empty matches */
+            ofs = so + 1;
+            continue;
+        }
+
+        const long pos = regex_line_pos(term, line, so);
+        const long dist = backward
+            ? (start - pos + total) % total
+            : (pos - start + total) % total;
+
+        if (dist <= limit && (best < 0 || dist < best)) {
+            best = dist;
+            *match_start = pos;
+            *match_end = regex_line_pos(term, line, eo - 1);
+        }
+
+        ofs = eo;
+    }
+
+    return best;
+}
+
+static bool
+find_next_regex(struct terminal *term, enum search_direction direction,
+                struct coord abs_start, struct coord abs_end,
+                struct range *match)
+{
+    if (!regex_compile(term))
+        return false;
+
+    const struct grid *grid = term->grid;
+    const regex_t *preg = &term->search.regex.preg;
+    const bool backward = direction != SEARCH_FORWARD;
+    const int cols = term->cols;
+    const long total = (long)grid->num_rows * cols;
+
+    const long start =
+        (long)grid_row_abs_to_sb(grid, term->rows, abs_start.row) * cols +
+        abs_start.col;
+    const long end =
+        (long)grid_row_abs_to_sb(grid, term->rows, abs_end.row) * cols +
+        abs_end.col;
+    const long limit = backward
+        ? (start - end + total) % total
+        : (end - start + total) % total;
+
+    struct regex_line line = {0};
+    long found_start = -1, found_end = -1;
+
+    /*
+     * Matches in the line where the search starts, but on the "wrong"
+     * side of 'start', come last, after having wrapped around the
+     * scrollback.
+     */
+    long wrapped_start = -1, wrapped_end = -1;
+
+    int sb_row = start / cols;
+    int rows_left = grid->num_rows;
+
+    for (bool first_line = true; rows_left > 0; first_line = false) {
+        if (!regex_line_extract(term, sb_row, &line)) {
+            rows_left--;
+            sb_row = backward
+                ? (sb_row == 0 ? grid->num_rows - 1 : sb_row - 1)
+                : (sb_row == grid->num_rows - 1 ? 0 : sb_row + 1);
+            continue;
+        }
+
+        const long line_first = (long)line.first_sb_row * cols;
+        const long line_last = (long)line.last_sb_row * cols + cols - 1;
+
+        if (!first_line) {
+            /* Stop when the entire line is outside the search range */
+            const long nearest = backward
+                ? (start - line_last + total) % total
+                : (line_first - start + total) % total;
+            if (nearest > limit)
+                break;
+        }
+
+        long s, e;
+        if (first_line) {
+            /* Matches on the right side of 'start' */
+            const long side_limit = backward
+                ? start - line_first
+                : line_last - start;
+
+            if (regex_line_best_match(
+                    term, preg, &line, backward, start,
+                    min(side_limit, limit), &s, &e) >= 0)
+            {
+                found_start = s;
+                found_end = e;
+                break;
+            }
+
+            /* Matches on the wrong side, i.e. after wrapping around */
+            if (regex_line_best_match(
+                    term, preg, &line, backward, start, limit, &s, &e) >= 0)
+            {
+                wrapped_start = s;
+                wrapped_end = e;
+            }
+        } else if (regex_line_best_match(
+                       term, preg, &line, backward, start, limit, &s, &e) >= 0)
+        {
+            found_start = s;
+            found_end = e;
+            break;
+        }
+
+        rows_left -= line.last_sb_row - line.first_sb_row + 1;
+        sb_row = backward
+            ? (line.first_sb_row == 0 ? grid->num_rows - 1 : line.first_sb_row - 1)
+            : (line.last_sb_row == grid->num_rows - 1 ? 0 : line.last_sb_row + 1);
+    }
+
+    free(line.text);
+    free(line.cells);
+
+    if (found_start < 0) {
+        found_start = wrapped_start;
+        found_end = wrapped_end;
+    }
+
+    if (found_start < 0)
+        return false;
+
+    struct coord match_start = {
+        .col = found_start % cols,
+        .row = grid_row_sb_to_abs(grid, term->rows, found_start / cols),
+    };
+    struct coord match_end = {
+        .col = found_end % cols,
+        .row = grid_row_sb_to_abs(grid, term->rows, found_end / cols),
+    };
+
+    /* Include the remaining cells of a double width character */
+    const struct row *row = grid->rows[match_end.row];
+    while (match_end.col + 1 < cols &&
+           row->cells[match_end.col + 1].wc > CELL_SPACER)
+    {
+        match_end.col++;
+    }
+
+    *match = (struct range){.start = match_start, .end = match_end};
+    return true;
+}
+
+/* Escapes regex special characters, for text added to the search
+ * string from the grid (e.g. extend-char) */
+static char32_t *
+regex_escape(const char32_t *text, size_t len, size_t *new_len)
+{
+    char32_t *escaped = xmalloc((len * 2 + 1) * sizeof(escaped[0]));
+    size_t j = 0;
+
+    for (size_t i = 0; i < len; i++) {
+        if (c32chr(U".[]{}()\\*+?^$|", text[i]) != NULL)
+            escaped[j++] = U'\\';
+        escaped[j++] = text[i];
+    }
+
+    escaped[j] = U'\0';
+    *new_len = j;
+    return escaped;
+}
+
 static bool
 find_next(struct terminal *term, enum search_direction direction,
           struct coord abs_start, struct coord abs_end, struct range *match)
 {
+    if (term->search.regex.enabled)
+        return find_next_regex(term, direction, abs_start, abs_end, match);
+
 #define ROW_DEC(_r) ((_r) = ((_r) - 1 + grid->num_rows) & (grid->num_rows - 1))
 #define ROW_INC(_r) ((_r) = ((_r) + 1) & (grid->num_rows - 1))
 
@@ -896,6 +1309,12 @@ search_extend_left(struct terminal *term, const struct coord *target)
     if (!extract_finish_wide(ctx, &new_text, &new_len))
         return;
 
+    if (term->search.regex.enabled) {
+        char32_t *escaped = regex_escape(new_text, new_len, &new_len);
+        free(new_text);
+        new_text = escaped;
+    }
+
     if (!search_ensure_size(term, term->search.len + new_len))
         return;
 
@@ -959,6 +1378,12 @@ search_extend_right(struct terminal *term, const struct coord *target)
 
     if (!extract_finish_wide(ctx, &new_text, &new_len))
         return;
+
+    if (term->search.regex.enabled) {
+        char32_t *escaped = regex_escape(new_text, new_len, &new_len);
+        free(new_text);
+        new_text = escaped;
+    }
 
     if (!search_ensure_size(term, term->search.len + new_len))
         return;
@@ -1389,6 +1814,11 @@ execute_binding(struct seat *seat, struct terminal *term,
         unicode_mode_activate(term);
         return true;
 
+    case BIND_ACTION_SEARCH_TOGGLE_REGEX:
+        term->search.regex.enabled = !term->search.regex.enabled;
+        *update_search_result = *redraw = true;
+        return true;
+
     case BIND_ACTION_SEARCH_COUNT:
         BUG("Invalid action type");
         return true;
@@ -1510,3 +1940,232 @@ update_search:
     if (redraw)
         render_refresh_search(term);
 }
+
+#if defined(_DEBUG)
+#include <fcntl.h>
+#include <unistd.h>
+
+#include <sys/epoll.h>
+#include <sys/timerfd.h>
+
+static void
+test_set_search(struct terminal *term, const char *text)
+{
+    free(term->search.buf);
+
+    term->search.len = strlen(text);
+    term->search.sz = term->search.len + 1;
+    term->search.buf = xmalloc(term->search.sz * sizeof(term->search.buf[0]));
+
+    for (size_t i = 0; i < term->search.len; i++)
+        term->search.buf[i] = (unsigned char)text[i];
+    term->search.buf[term->search.len] = U'\0';
+}
+
+/* Searches the entire scrollback, starting at (row, col), like
+ * search_find_next() does */
+static bool
+test_find(struct terminal *term, enum search_direction direction,
+          int row, int col, struct range *match)
+{
+    const int mask = term->grid->num_rows - 1;
+    struct coord start = {col, row};
+    struct coord end = start;
+
+    if (direction == SEARCH_FORWARD) {
+        if (--end.col < 0) {
+            end.col = term->cols - 1;
+            end.row = (end.row - 1) & mask;
+        }
+    } else {
+        if (++end.col >= term->cols) {
+            end.col = 0;
+            end.row = (end.row + 1) & mask;
+        }
+    }
+
+    return find_next(term, direction, start, end, match);
+}
+
+static bool
+test_match_is(const struct range *match,
+              int start_row, int start_col, int end_row, int end_col)
+{
+    return match->start.row == start_row && match->start.col == start_col &&
+           match->end.row == end_row && match->end.col == end_col;
+}
+
+UNITTEST
+{
+    struct config conf = {0};
+    struct terminal term;
+    term_test_init(&term, &conf, 6, 10, 8);
+
+    /* Row 1 soft-wraps into row 2 */
+    term_test_write(&term, "foo bar\r\n");
+    term_test_write(&term, "ip-10-0-10-127.ec2\r\n");
+    term_test_write(&term, "Foo baz\r\n");
+    term_test_write(&term, "x1 x22");
+
+    term.search.regex.enabled = true;
+    struct range m;
+
+    /* Matches span soft-wrapped rows */
+    test_set_search(&term, "ip.*ec2");
+    xassert(test_find(&term, SEARCH_BACKWARD, 5, 9, &m));
+    xassert(test_match_is(&m, 1, 0, 2, 7));
+
+    /* Smart case: case insensitive without upper case letters... */
+    test_set_search(&term, "^foo");
+    xassert(test_find(&term, SEARCH_BACKWARD, 5, 9, &m));
+    xassert(test_match_is(&m, 3, 0, 3, 2));
+
+    /* ...and case sensitive with */
+    test_set_search(&term, "FOO");
+    xassert(!test_find(&term, SEARCH_BACKWARD, 5, 9, &m));
+    test_set_search(&term, "Foo b");
+    xassert(test_find(&term, SEARCH_FORWARD, 0, 0, &m));
+    xassert(test_match_is(&m, 3, 0, 3, 4));
+
+    /* Forward, continuing after the previous match, wrapping around */
+    test_set_search(&term, "ba.");
+    xassert(test_find(&term, SEARCH_FORWARD, 0, 0, &m));
+    xassert(test_match_is(&m, 0, 4, 0, 6));
+    xassert(test_find(&term, SEARCH_FORWARD, 0, 5, &m));
+    xassert(test_match_is(&m, 3, 4, 3, 6));
+    xassert(test_find(&term, SEARCH_FORWARD, 3, 5, &m));
+    xassert(test_match_is(&m, 0, 4, 0, 6));
+
+    /* Backward, skipping a match after the start position on the
+     * same row, and wrapping around */
+    xassert(test_find(&term, SEARCH_BACKWARD, 3, 3, &m));
+    xassert(test_match_is(&m, 0, 4, 0, 6));
+    xassert(test_find(&term, SEARCH_BACKWARD, 0, 3, &m));
+    xassert(test_match_is(&m, 3, 4, 3, 6));
+
+    /* Backward, from the same position */
+    xassert(test_find(&term, SEARCH_BACKWARD_SAME_POSITION, 3, 4, &m));
+    xassert(test_match_is(&m, 3, 4, 3, 6));
+
+    /* Line anchors; trailing empty cells aren't part of a line */
+    test_set_search(&term, "z$");
+    xassert(test_find(&term, SEARCH_BACKWARD, 5, 9, &m));
+    xassert(test_match_is(&m, 3, 6, 3, 6));
+    test_set_search(&term, "^x1 x22$");
+    xassert(test_find(&term, SEARCH_BACKWARD, 5, 9, &m));
+    xassert(test_match_is(&m, 4, 0, 4, 5));
+
+    /* A hard line break isn't matched across */
+    test_set_search(&term, "bar.*ip");
+    xassert(!test_find(&term, SEARCH_BACKWARD, 5, 9, &m));
+
+    /* Empty matches are ignored */
+    test_set_search(&term, "z*");
+    xassert(test_find(&term, SEARCH_FORWARD, 0, 0, &m));
+    xassert(test_match_is(&m, 3, 6, 3, 6));
+
+    /* Invalid regex doesn't match, and is re-compiled when changed */
+    test_set_search(&term, "(");
+    xassert(!test_find(&term, SEARCH_BACKWARD, 5, 9, &m));
+    xassert(!term.search.regex.compiled);
+    test_set_search(&term, "(baz)");
+    xassert(test_find(&term, SEARCH_BACKWARD, 5, 9, &m));
+    xassert(term.search.regex.compiled);
+    xassert(test_match_is(&m, 3, 4, 3, 6));
+
+    /* Limited range, like when highlighting matches in the view */
+    test_set_search(&term, "ba.");
+    xassert(find_next(&term, SEARCH_FORWARD,
+                      (struct coord){0, 0}, (struct coord){9, 2}, &m));
+    xassert(test_match_is(&m, 0, 4, 0, 6));
+    xassert(!find_next(&term, SEARCH_FORWARD,
+                       (struct coord){5, 0}, (struct coord){9, 2}, &m));
+
+    /* Literal search is unaffected */
+    term.search.regex.enabled = false;
+    test_set_search(&term, "ba.");
+    xassert(!test_find(&term, SEARCH_BACKWARD, 5, 9, &m));
+    test_set_search(&term, "10-127");
+    xassert(test_find(&term, SEARCH_BACKWARD, 5, 9, &m));
+    xassert(test_match_is(&m, 1, 8, 2, 3));
+
+    search_regex_free(&term);
+    xassert(term.search.regex.pattern == NULL);
+    free(term.search.buf);
+    term_test_destroy(&term);
+}
+
+UNITTEST
+{
+    size_t len;
+    char32_t *escaped = regex_escape(U"a.b*c(d)|e", 10, &len);
+    xassert(len == 15);
+    xassert(c32cmp(escaped, U"a\\.b\\*c\\(d\\)\\|e") == 0);
+    free(escaped);
+}
+
+static bool
+test_fd_handler(struct fdm *fdm, int fd, int events, void *data)
+{
+    char buf[16];
+    ssize_t count = read(fd, buf, sizeof(buf));
+    (void)count;
+    (*(int *)data)++;
+    return true;
+}
+
+UNITTEST
+{
+    /* search-freeze: client output isn't read while searching */
+    struct config conf = {0};
+    struct terminal term;
+    term_test_init(&term, &conf, 2, 10, 2);
+
+    struct fdm *fdm = fdm_init();
+    xassert(fdm != NULL);
+
+    int fds[2];
+    xassert(pipe2(fds, O_CLOEXEC | O_NONBLOCK) == 0);
+
+    int reads = 0;
+    xassert(fdm_add(fdm, fds[0], EPOLLIN, &test_fd_handler, &reads));
+    term.fdm = fdm;
+    term.ptmx = fds[0];
+
+    /* A timer, so that fdm_poll() never blocks for long */
+    int timer_fires = 0;
+    int timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
+    xassert(timer_fd >= 0);
+    xassert(fdm_add(fdm, timer_fd, EPOLLIN, &test_fd_handler, &timer_fires));
+
+    const struct itimerspec timeout = {
+        .it_interval = {.tv_nsec = 20 * 1000000},
+        .it_value = {.tv_nsec = 20 * 1000000},
+    };
+    xassert(timerfd_settime(timer_fd, 0, &timeout, NULL) == 0);
+
+    search_freeze(&term);
+    xassert(term.search.frozen);
+
+    /* Resuming (e.g. after an interactive resize) is ignored */
+    term_ptmx_resume(&term);
+
+    xassert(write(fds[1], "x", 1) == 1);
+    for (int i = 0; i < 3; i++)
+        xassert(fdm_poll(fdm));
+    xassert(reads == 0);
+
+    search_unfreeze(&term);
+    xassert(!term.search.frozen);
+
+    while (reads == 0)
+        xassert(fdm_poll(fdm));
+    xassert(reads == 1);
+
+    fdm_del(fdm, timer_fd);
+    fdm_del(fdm, fds[0]);
+    close(fds[1]);
+    fdm_destroy(fdm);
+    term_test_destroy(&term);
+}
+#endif

@@ -1077,6 +1077,31 @@ xdgtoken=95ebdfe56e4f47ddb5bba9d7dc3a2c35
 	string. This option is ignored if
 	*indicator-position=none*. Default: _empty string_.
 
+*search-regex*
+	Boolean. When enabled, scrollback searches start in regex mode:
+	the search string is a POSIX extended regular expression (see
+	*regex*(7)), instead of literal text. The *toggle-regex* search
+	binding switches between the two modes during a search.
+	
+	In regex mode, a match never spans more than one line (soft-wrapped
+	lines count as one line), so *^* and *$* match at the start and
+	end of a line. Like the literal search, matching is case
+	insensitive, unless the search string contains an upper case
+	letter. An invalid regular expression simply doesn't match.
+	
+	Default: _no_.
+
+*search-freeze*
+	Boolean. When enabled, ankle stops reading output from the client
+	application while in scrollback search mode, so that the screen
+	and the scrollback don't change underneath the search (for
+	example from a program like *htop*, or a busy log). Output resumes
+	when the search ends. Applications writing to the terminal block
+	while the search is open, as if output had been suspended with
+	*Control+s*.
+	
+	Default: _no_.
+
 # SECTION: url
 
 Note that you can also add custom regular expressions, see the 'regex'
@@ -1875,6 +1900,11 @@ scrollback search mode. The syntax is exactly the same as the regular
 *unicode-input*
 	Unicode input mode. See _key-bindings.unicode-input_ for
 	details. Default: _none_.
+
+*toggle-regex*
+	Switches between literal and regex search (see
+	_scrollback.search-regex_), and searches again with the current
+	search string. Default: _none_.
 
 *scrollback-up-page*
 	Scrolls up/back one page in history. Default: _Shift+Page\_Up
