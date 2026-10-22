@@ -1410,6 +1410,7 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
                 .url = shm_chain_new(wayl, false, 1, desired_bit_depth, NULL, NULL),
                 .csd = shm_chain_new(wayl, false, 1, desired_bit_depth, NULL, NULL),
                 .overlay = shm_chain_new(wayl, false, 1, desired_bit_depth, NULL, NULL),
+                .paste_prompt = shm_chain_new(wayl, false, 1, desired_bit_depth, NULL, NULL),
             },
             .scrollback_lines = conf->scrollback.lines,
             .app_sync_updates.timer_fd = app_sync_updates_fd,
@@ -1964,6 +1965,7 @@ term_destroy(struct terminal *term)
     shm_chain_free(term->render.chains.url);
     shm_chain_free(term->render.chains.csd);
     shm_chain_free(term->render.chains.overlay);
+    shm_chain_free(term->render.chains.paste_prompt);
     pixman_region32_fini(&term->render.last_overlay_clip);
 
     tll_free(term->tab_stops);
@@ -1976,6 +1978,7 @@ term_destroy(struct terminal *term)
         free(it->item.data);
         tll_remove(term->ptmx_paste_buffers, it);
     }
+    free(term->paste_confirm.data);
 
     notify_free(term, &term->kitty_notification);
     tll_foreach(term->active_notifications, it) {

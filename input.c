@@ -37,6 +37,7 @@
 #include "spawn.h"
 #include "terminal.h"
 #include "tokenize.h"
+#include "paste.h"
 #include "unicode-mode.h"
 #include "url-mode.h"
 #include "util.h"
@@ -1694,7 +1695,13 @@ key_press_release(struct seat *seat, struct terminal *term, uint32_t serial,
         seat->wayl->key_binding_manager, term->conf, seat);
     xassert(bindings != NULL);
 
-    if (term->unicode_mode.active) {
+    if (term->paste_confirm.active) {
+        if (pressed)
+            paste_confirm_input(seat, term, sym);
+        return;
+    }
+
+    else if (term->unicode_mode.active) {
         if (pressed)
             unicode_mode_input(seat, term, sym);
         return;

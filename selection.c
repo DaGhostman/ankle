@@ -23,6 +23,7 @@
 #include "extract.h"
 #include "grid.h"
 #include "misc.h"
+#include "paste.h"
 #include "render.h"
 #include "search.h"
 #include "uri.h"
@@ -2467,29 +2468,20 @@ static void
 receive_offer(char *data, size_t size, void *user)
 {
     struct terminal *term = user;
-    xassert(term->is_sending_paste_data);
-    term_paste_data_to_slave(term, data, size);
+    paste_data(term, data, size);
 }
 
 static void
 receive_offer_done(void *user)
 {
     struct terminal *term = user;
-
-    if (term->bracketed_paste)
-        term_paste_data_to_slave(term, "\033[201~", 6);
-
-    term->is_sending_paste_data = false;
-
-    /* Make sure we send any queued up non-paste data */
-    if (tll_length(term->ptmx_buffers) > 0)
-        fdm_event_add(term->fdm, term->ptmx, EPOLLOUT);
+    paste_end(term);
 }
 
 void
 selection_from_clipboard(struct seat *seat, struct terminal *term, uint32_t serial)
 {
-    if (term->is_sending_paste_data) {
+    if (paste_in_progress(term)) {
         /* We're already pasting... */
         return;
     }
@@ -2498,10 +2490,7 @@ selection_from_clipboard(struct seat *seat, struct terminal *term, uint32_t seri
     if (clipboard->data_offer == NULL)
         return;
 
-    term->is_sending_paste_data = true;
-
-    if (term->bracketed_paste)
-        term_paste_data_to_slave(term, "\033[200~", 6);
+    paste_begin(term);
 
     text_from_clipboard(
         seat, term, false, &receive_offer, &receive_offer_done, term);
@@ -2624,7 +2613,7 @@ selection_from_primary(struct seat *seat, struct terminal *term)
     if (term->wl->primary_selection_device_manager == NULL)
         return;
 
-    if (term->is_sending_paste_data) {
+    if (paste_in_progress(term)) {
         /* We're already pasting... */
         return;
     }
@@ -2633,9 +2622,7 @@ selection_from_primary(struct seat *seat, struct terminal *term)
     if (primary->data_offer == NULL)
         return;
 
-    term->is_sending_paste_data = true;
-    if (term->bracketed_paste)
-        term_paste_data_to_slave(term, "\033[200~", 6);
+    paste_begin(term);
 
     text_from_primary(
         seat, term, false, &receive_offer, &receive_offer_done, term);
@@ -2819,7 +2806,7 @@ enter(void *data, struct wl_data_device *wl_data_device, uint32_t serial,
     tll_foreach(wayl->terms, it) {
         if (it->item->window != NULL &&
             term_surface_kind(it->item, surface) == TERM_SURF_GRID &&
-            !it->item->is_sending_paste_data)
+            !paste_in_progress(it->item))
         {
             wl_data_offer_accept(
                 offer, serial, mime_type_map[seat->clipboard.mime_type]);
@@ -2922,10 +2909,7 @@ drop(void *data, struct wl_data_device *wl_data_device)
     /* Don't keep our copy of the write-end open (or we'll never get EOF) */
     close(write_fd);
 
-    term->is_sending_paste_data = true;
-
-    if (term->bracketed_paste)
-        term_paste_data_to_slave(term, "\033[200~", 6);
+    paste_begin(term);
 
     begin_receive_clipboard(
         term, false, read_fd, clipboard->mime_type,

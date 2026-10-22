@@ -2282,6 +2282,11 @@ wayl_win_destroy(struct wl_window *win)
         wl_surface_commit(win->overlay.surface.surf);
     }
 
+    if (win->paste_prompt.surface.surf != NULL) {
+        wl_surface_attach(win->paste_prompt.surface.surf, NULL, 0, 0);
+        wl_surface_commit(win->paste_prompt.surface.surf);
+    }
+
     /* Scrollback search */
     if (win->search.surface.surf != NULL) {
         wl_surface_attach(win->search.surface.surf, NULL, 0, 0);
@@ -2324,6 +2329,7 @@ wayl_win_destroy(struct wl_window *win)
     wayl_win_subsurface_destroy(&win->scrollback_indicator);
     wayl_win_subsurface_destroy(&win->render_timer);
     wayl_win_subsurface_destroy(&win->overlay);
+    wayl_win_subsurface_destroy(&win->paste_prompt);
 
     shm_purge(term->render.chains.search);
     shm_purge(term->render.chains.scrollback_indicator);
@@ -2331,6 +2337,7 @@ wayl_win_destroy(struct wl_window *win)
     shm_purge(term->render.chains.grid);
     shm_purge(term->render.chains.url);
     shm_purge(term->render.chains.csd);
+    shm_purge(term->render.chains.paste_prompt);
 
     tll_foreach(win->xdg_tokens, it) {
         xdg_activation_token_v1_destroy(it->item->xdg_token);

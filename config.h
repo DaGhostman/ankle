@@ -325,6 +325,12 @@ struct config {
             OSC52_PASTE_ENABLED,
             OSC52_ENABLED,
         } osc52;
+
+        enum {
+            PASTE_PROTECTION_NEVER,
+            PASTE_PROTECTION_UNBRACKETED,
+            PASTE_PROTECTION_ALWAYS,
+        } paste_protection;
     } security;
 
     struct {

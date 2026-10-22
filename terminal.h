@@ -670,6 +670,7 @@ struct terminal {
             struct buffer_chain *url;
             struct buffer_chain *csd;
             struct buffer_chain *overlay;
+            struct buffer_chain *paste_prompt;
         } chains;
 
         /* Scheduled for rendering, as soon-as-possible */
@@ -836,6 +837,18 @@ struct terminal {
         int count;
         char32_t character;
     } unicode_mode;
+
+    /* Paste protection: pasted text is buffered, and held back until
+     * the user confirms it */
+    struct {
+        bool receiving;   /* Buffering data from the clipboard */
+        bool active;      /* Waiting for the user's answer */
+        bool bracketed;   /* Bracketed paste was enabled when the paste began */
+        char *data;
+        size_t len;
+        size_t size;
+        size_t lines;
+    } paste_confirm;
 
     struct {
         bool in_progress;

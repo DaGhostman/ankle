@@ -823,6 +823,11 @@ test_section_security(void)
         (const char*[]){"disabled", "copy-enabled", "paste-enabled", "enabled"},
         (int []){OSC52_DISABLED, OSC52_COPY_ENABLED, OSC52_PASTE_ENABLED, OSC52_ENABLED},
         (int *)&conf.security.osc52);
+    test_enum(
+        &ctx, &parse_section_security, "paste-protection", 3,
+        (const char*[]){"never", "unbracketed", "always"},
+        (int []){PASTE_PROTECTION_NEVER, PASTE_PROTECTION_UNBRACKETED, PASTE_PROTECTION_ALWAYS},
+        (int *)&conf.security.paste_protection);
 
     config_free(&conf);
 }

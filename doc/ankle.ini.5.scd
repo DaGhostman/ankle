@@ -708,6 +708,30 @@ Note: do not set *TERM* here; use the *term* option in the main
 	
 	Default: _enabled_
 
+*paste-protection*
+	Whether to ask for confirmation before pasting text that contains
+	line breaks. One of *never*, *unbracketed* or *always*.
+	
+	A line break in pasted text acts as if *Return* was pressed, so a
+	pasted command runs straight away. Text copied from a web page can
+	contain hidden line breaks, or other commands than the ones shown.
+	When the application has enabled bracketed paste mode (most modern
+	shells and editors do), it can tell pasted text apart from typed
+	text, and won't execute it on its own.
+	
+	- *never*: paste right away. This is the default.
+	- *unbracketed*: ask before pasting multi-line text when the
+	  application has *not* enabled bracketed paste mode.
+	- *always*: ask before pasting any multi-line text.
+	
+	While asking, the window is dimmed, and a prompt shows the number
+	of lines. Press *y* or *Return* to paste, and *n*, *Escape* or
+	*Control+c* to cancel. Pasting from the clipboard, the primary
+	selection and drag-and-drop are all covered. Single-line text is
+	always pasted right away.
+	
+	Default: _never_
+
 
 # SECTION: bell
 

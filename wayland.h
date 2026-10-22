@@ -401,6 +401,7 @@ struct wl_window {
     struct wayl_sub_surface scrollback_indicator;
     struct wayl_sub_surface render_timer;
     struct wayl_sub_surface overlay;
+    struct wayl_sub_surface paste_prompt;
 
     struct wl_callback *frame_callback;
 
