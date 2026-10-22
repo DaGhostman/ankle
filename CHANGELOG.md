@@ -135,6 +135,8 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 * Crash when an output changes, or is removed, while a terminal is
   shutting down ([foot#2487][foot-2487]). The same race could also
   crash a configuration reload, or a drag-and-drop.
+* Duplicated log messages in the journal, when running the server
+  as a systemd service ([foot#2400][foot-2400]).
 
 [foot-2372]: https://codeberg.org/dnkl/foot/issues/2372
 [foot-2343]: https://codeberg.org/dnkl/foot/issues/2343
@@ -142,6 +144,7 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-2338]: https://codeberg.org/dnkl/foot/issues/2338
 [foot-pr-2480]: https://codeberg.org/dnkl/foot/pulls/2480
 [foot-2487]: https://codeberg.org/dnkl/foot/issues/2487
+[foot-2400]: https://codeberg.org/dnkl/foot/issues/2400
 
 
 ## Unreleased

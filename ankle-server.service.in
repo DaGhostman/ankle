@@ -2,6 +2,9 @@
 ExecStart=@bindir@/ankle --server=3
 UnsetEnvironment=LISTEN_PID LISTEN_FDS LISTEN_FDNAMES
 NonBlocking=true
+# Logs go to syslog (the journal); don't log them twice via stderr
+StandardOutput=null
+StandardError=null
 
 [Unit]
 Requires=%N.socket
