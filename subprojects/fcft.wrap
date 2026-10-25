@@ -1,7 +1,7 @@
 [wrap-git]
 url = https://codeberg.org/dnkl/fcft.git
 # Pinned, since the patches below are made against this revision
-revision = 1ff7e79dabb22514fc27dcf1b61124c1e7bb7c62
+revision = aad5c7acd59770553c8515bf4ed4cd2baa2ac55b
 depth = 1
 
 # Applied in order:
@@ -10,8 +10,11 @@ depth = 1
 #  0002: fcft PR #116, glyph-index and shaped-run rasterization APIs
 #  0003+0004: fcft PR #118, COLRv1 color glyphs (rendered with pixman,
 #        instead of rejecting COLRv1 fonts)
+#  0005: fcft PR #121, render multi-glyph SVG documents instead of
+#        erroring out (fcft#120, OpenMoji with freetype 2.15)
 diff_files =
   fcft/0001-text-run-glyph-cache.patch,
   fcft/0002-glyph-index-and-shaped-run-apis.patch,
   fcft/0003-revert-reject-colrv1-fonts.patch,
-  fcft/0004-colrv1-rendering.patch
+  fcft/0004-colrv1-rendering.patch,
+  fcft/0005-svg-multi-glyph-documents.patch
