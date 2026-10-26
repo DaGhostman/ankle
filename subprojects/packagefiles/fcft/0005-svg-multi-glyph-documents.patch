@@ -1,0 +1,43 @@
+From d2fca04ed3b856b0c7593cdeb5991feeef93f417 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Daniel=20Ekl=C3=B6f?= <daniel@ekloef.se>
+Date: Sun, 25 Oct 2026 13:03:44 +0100
+Subject: [PATCH] svg: nanosvg: don't error out on multi-glyph SVG documents
+
+Instead, log a warning, and render the *first* glyph index, regardless
+of what glyph index freetype requested.
+
+Note: we don't support proper multi-glyph SVG documents since there's
+no API in nanosvg to select _which_ index to render.
+
+Closes #120
+---
+
+diff --git a/svg-backend-nanosvg.c b/svg-backend-nanosvg.c
+index 4c73281..38227ca 100644
+--- a/svg-backend-nanosvg.c
++++ b/svg-backend-nanosvg.c
+@@ -66,9 +66,7 @@ fcft_svg_render(FT_GlyphSlot slot, FT_Pointer *_state)
+ 
+     FT_Bitmap *bitmap = &slot->bitmap;
+ 
+-    /* TODO: implement this (note: we’re erroring out in preset_slot()
+-     * if this is not true) */
+-    assert(state->glyph_id_start == state->glyph_id_end);
++    /* TODO: implement slot->glyph_index */
+ 
+     /* TODO: fix logging - svg->{width,height} is not the width/height we use */
+     LOG_DBG("rendering to a %dx%d bitmap (svg size: %.2fx%.2f -> %.2fx%.2f)",
+@@ -231,12 +229,9 @@ fcft_svg_preset_slot(FT_GlyphSlot slot, FT_Bool cache, FT_Pointer *_state)
+     if (document->start_glyph_id != document->end_glyph_id) {
+         static bool have_warned = false;
+         if (!have_warned) {
+-            LOG_ERR("multi-glyph rendering is unsupported");
++            LOG_WARN("font has multi-glyphs, for which fcft has only limited support");
+             have_warned = true;
+         }
+-
+-        state->error = FT_Err_Unimplemented_Feature;
+-        return FT_Err_Unimplemented_Feature;
+     }
+ 
+     state->glyph_id_start = document->start_glyph_id;

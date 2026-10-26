@@ -196,6 +196,10 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   crash a configuration reload, or a drag-and-drop.
 * Duplicated log messages in the journal, when running the server
   as a systemd service ([foot#2400][foot-2400]).
+* Some color emoji from SVG fonts (e.g. OpenMoji) not rendering with
+  freetype >= 2.15 ("failed to render glyph: unimplemented feature").
+  The bundled fcft is updated, and carries fcft PR
+  [#121][fcft-pr-121] ([fcft#120][fcft-120]).
 
 [foot-2372]: https://codeberg.org/dnkl/foot/issues/2372
 [foot-2343]: https://codeberg.org/dnkl/foot/issues/2343
@@ -204,6 +208,8 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-pr-2480]: https://codeberg.org/dnkl/foot/pulls/2480
 [foot-2487]: https://codeberg.org/dnkl/foot/issues/2487
 [foot-2400]: https://codeberg.org/dnkl/foot/issues/2400
+[fcft-pr-121]: https://codeberg.org/dnkl/fcft/pulls/121
+[fcft-120]: https://codeberg.org/dnkl/fcft/issues/120
 [foot-2449]: https://codeberg.org/dnkl/foot/issues/2449
 [foot-1713]: https://codeberg.org/dnkl/foot/issues/1713
 [foot-2477]: https://codeberg.org/dnkl/foot/issues/2477
