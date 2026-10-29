@@ -15,8 +15,10 @@
 #include "config.h"
 #include "key-binding.h"
 #include "reaper.h"
+#include "shaping.h"
 #include "sixel.h"
 #include "user-notification.h"
+#include "vimode.h"
 #include "vt.h"
 
 extern bool fdm_ptmx(struct fdm *fdm, int fd, int events, void *data);
@@ -216,6 +218,12 @@ shm_chain_new(
 
 
 void search_selection_cancelled(struct terminal *term) {}
+
+struct shaping_cache *shaping_cache_init(void) { return NULL; }
+void shaping_cache_destroy(struct shaping_cache *cache) {}
+void shaping_cache_flush(struct shaping_cache *cache) {}
+
+void vimode_cancel(struct terminal *term) {}
 
 void get_current_modifiers(const struct seat *seat,
                            xkb_mod_mask_t *effective,
