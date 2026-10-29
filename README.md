@@ -1,4 +1,4 @@
-# ![Logo: a terminal with a foot shaped prompt](icons/hicolor/48x48/apps/ankle.png) ankle
+# ![Logo: a chevron fused into a bracket, joined by a cursor](icons/hicolor/48x48/apps/ankle.png) ankle
 
 [![CI](https://github.com/DaGhostman/ankle/actions/workflows/ci.yml/badge.svg)](https://github.com/DaGhostman/ankle/actions/workflows/ci.yml)
 
@@ -189,7 +189,7 @@ Conduct](CODE_OF_CONDUCT.md).
   [tllist](https://codeberg.org/dnkl/tllist). If you like ankle,
   consider [supporting foot's author](https://liberapay.com/dnkl).
 * [Ordoviz](https://codeberg.org/Ordoviz), for designing foot's
-  logo, which ankle currently uses.
+  logo, which was ankle's original icon.
 
 
 ## License
