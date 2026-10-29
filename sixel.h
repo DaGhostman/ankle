@@ -22,6 +22,8 @@ void sixel_destroy_all(struct terminal *term);
 
 void sixel_scroll_up(struct terminal *term, int rows);
 void sixel_scroll_down(struct terminal *term, int rows);
+void sixel_scroll_partial(
+    struct terminal *term, struct scroll_region region, int rows, bool reverse);
 
 void sixel_cell_size_changed(struct terminal *term);
 void sixel_sync_cache(const struct terminal *term, struct sixel *sixel);
