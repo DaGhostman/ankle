@@ -209,6 +209,13 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 * Selection of wide (multi-cell) characters going wrong when
   extending it, in some cases (patch from foot PR
   [#2492][foot-pr-2492]).
+* Sixel images outside a scrolling region (DECSTBM) moving, or being
+  erased, when the region scrolls; images now follow their text rows,
+  and are split or cropped where the region boundary cuts through
+  them ([foot#2490][foot-2490]).
+* Crash when a sixel image is emitted while the cursor is outside a
+  scrolling region (e.g. below it), and the image does not fit on the
+  screen. The image is now clipped at the bottom of the screen.
 
 [foot-2372]: https://codeberg.org/dnkl/foot/issues/2372
 [foot-2343]: https://codeberg.org/dnkl/foot/issues/2343
@@ -223,6 +230,7 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-pr-2494]: https://codeberg.org/dnkl/foot/pulls/2494
 [foot-pr-2491]: https://codeberg.org/dnkl/foot/pulls/2491
 [foot-pr-2492]: https://codeberg.org/dnkl/foot/pulls/2492
+[foot-2490]: https://codeberg.org/dnkl/foot/issues/2490
 [foot-2449]: https://codeberg.org/dnkl/foot/issues/2449
 [foot-1713]: https://codeberg.org/dnkl/foot/issues/1713
 [foot-2477]: https://codeberg.org/dnkl/foot/issues/2477

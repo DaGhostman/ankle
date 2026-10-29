@@ -3677,7 +3677,10 @@ term_scroll_partial(struct terminal *term, struct scroll_region region, int rows
             selection_scroll_up(term, rows);
     }
 
-    sixel_scroll_up(term, rows);
+    const bool full_screen = region.start == 0 && region.end == term->rows;
+
+    if (likely(full_screen))
+        sixel_scroll_up(term, rows);
 
     /* How many lines from the scrollback start is the current viewport? */
     int view_sb_start_distance = grid_row_abs_to_sb(
@@ -3711,6 +3714,9 @@ term_scroll_partial(struct terminal *term, struct scroll_region region, int rows
         struct row *row = grid_row_and_alloc(term->grid, r);
         erase_line(term, row);
     }
+
+    if (unlikely(!full_screen))
+        sixel_scroll_partial(term, region, rows, false);
 
     term->grid->cur_row = grid_row(term->grid, term->grid->cursor.point.row);
 
@@ -3763,7 +3769,10 @@ term_scroll_reverse_partial(struct terminal *term,
             term->render.last_cursor.row = NULL;
     }
 
-    sixel_scroll_down(term, rows);
+    const bool full_screen = region.start == 0 && region.end == term->rows;
+
+    if (likely(full_screen))
+        sixel_scroll_down(term, rows);
 
     const bool view_follows = term->grid->view == term->grid->offset;
     term->grid->offset -= rows;
@@ -3803,6 +3812,9 @@ term_scroll_reverse_partial(struct terminal *term,
         struct row *row = grid_row_and_alloc(term->grid, r);
         erase_line(term, row);
     }
+
+    if (unlikely(!full_screen))
+        sixel_scroll_partial(term, region, rows, true);
 
     if (unlikely(view_sb_start_distance > offset_sb_start_distance))
         term_damage_view(term);

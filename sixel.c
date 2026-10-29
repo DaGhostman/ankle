@@ -227,8 +227,9 @@ sixel_destroy_all(struct terminal *term)
     tll_free(term->alt.sixel_images);
 }
 
+/* Marks the cells covered by the sixel as dirty, forcing a re-render */
 static void
-sixel_erase(struct terminal *term, struct sixel *sixel)
+sixel_damage(struct terminal *term, const struct sixel *sixel)
 {
     for (int i = 0; i < sixel->rows; i++) {
         int r = (sixel->pos.row + i) & (term->grid->num_rows - 1);
@@ -244,7 +245,12 @@ sixel_erase(struct terminal *term, struct sixel *sixel)
         for (int c = sixel->pos.col; c < min(sixel->pos.col + sixel->cols, term->cols); c++)
             row->cells[c].attrs.clean = 0;
     }
+}
 
+static void
+sixel_erase(struct terminal *term, struct sixel *sixel)
+{
+    sixel_damage(term, sixel);
     sixel_destroy(sixel);
 }
 
@@ -464,6 +470,232 @@ sixel_scroll_down(struct terminal *term, int rows)
             tll_remove(term->grid->sixel_images, it);
         } else
             break;
+    }
+
+    term->bits_affecting_ascii_printer.sixels =
+        tll_length(term->grid->sixel_images) > 0;
+    term_update_ascii_printer(term);
+    verify_sixels(term);
+}
+
+/*
+ * Creates a new sixel from 'count' cell rows of 'six', starting at
+ * cell row 'first'. The new image is positioned at absolute row
+ * 'row'.
+ */
+static struct sixel
+sixel_slice_rows(const struct terminal *term, const struct sixel *six,
+                 int first, int count, int row)
+{
+    const int width = six->original.width;
+    const int y_start = first * six->cell_height;
+    const int y_end = min((first + count) * six->cell_height,
+                          six->original.height);
+    const int height = y_end - y_start;
+
+    xassert(height > 0);
+
+    uint32_t *data = xmalloc(width * height * sizeof(uint32_t));
+    const uint32_t *old_data = six->original.data;
+    memcpy(data, &old_data[y_start * width],
+           width * height * sizeof(uint32_t));
+
+    pixman_image_t *pix = pixman_image_create_bits_no_clear(
+        term->sixel.pixman_fmt, width, height, data, width * sizeof(uint32_t));
+
+    return (struct sixel){
+        .pix = NULL,
+        .width = -1,
+        .height = -1,
+        .pos = {.col = six->pos.col, .row = row},
+        .cols = six->cols,
+        .rows = count,
+        .opaque = six->opaque,
+        .cell_width = six->cell_width,
+        .cell_height = six->cell_height,
+        .original = {
+            .data = data,
+            .pix = pix,
+            .width = width,
+            .height = height,
+        },
+        .scaled = {
+            .data = NULL,
+            .pix = NULL,
+            .width = -1,
+            .height = -1,
+        },
+    };
+}
+
+/*
+ * Moves sixels along with the rows of a scroll region that does not
+ * cover the entire screen. Must be called *after*
+ * term_scroll_partial() (or term_scroll_reverse_partial()) has
+ * updated the grid offset, swapped the margin rows back in place,
+ * and erased the scrolled in lines.
+ *
+ * The grid offset is moved by 'rows', which moves the sixels (their
+ * row numbers are absolute) together with the scrolling region. But
+ * the margins' rows are then swapped back to where they were, and
+ * the rows scrolled out of the region's top end up in the scrollback
+ * (or, when scrolling in reverse, the newest scrollback rows end up
+ * in the region's top, and are erased). This function replays those
+ * row swaps, and moves (or splits, or erases) the sixels the same way
+ * as the text.
+ */
+void
+sixel_scroll_partial(struct terminal *term, struct scroll_region region,
+                     int rows, bool reverse)
+{
+    if (likely(tll_length(term->grid->sixel_images) == 0))
+        return;
+
+    const struct grid *grid = term->grid;
+    const int mask = grid->num_rows - 1;
+    const int new_offset = grid->offset;
+
+    /*
+     * The row swaps touch the (new) screen rows [-rows, term->rows)
+     * when scrolling up, and [0, term->rows + rows) when scrolling
+     * down. 'window' holds the rows, as indices relative to 'base',
+     * in that range. With a small grid, the range may wrap around and
+     * cover the entire grid.
+     */
+    const int first = reverse ? 0 : -rows;
+    const int count = min(term->rows + rows, grid->num_rows);
+    const int base = (new_offset + first) & mask;
+
+    /* window[new idx] = old idx (or -1 if erased) */
+    int *window = xmalloc(count * sizeof(window[0]));
+    /* dest[old idx] = new idx (or -1 if erased) */
+    int *dest = xmalloc(count * sizeof(dest[0]));
+
+    for (int i = 0; i < count; i++)
+        window[i] = i;
+
+#define idx(screen_row) (((screen_row) - first) & mask)
+#define swap(a, b) do {                         \
+        int tmp = window[idx(a)];               \
+        window[idx(a)] = window[idx(b)];        \
+        window[idx(b)] = tmp;                   \
+    } while (0)
+
+    if (!reverse) {
+        /* Top non-scrolling region */
+        for (int i = region.start - 1; i >= 0; i--)
+            swap(i - rows, i);
+
+        /* Bottom non-scrolling region */
+        for (int i = term->rows - 1; i >= region.end; i--)
+            swap(i - rows, i);
+
+        /* Scrolled in lines */
+        for (int r = region.end - rows; r < region.end; r++)
+            window[idx(r)] = -1;
+    } else {
+        /* Scrolled out lines; these rows are free:d */
+        for (int r = region.end - rows; r < region.end; r++)
+            window[idx(r + rows)] = -1;
+
+        /* Bottom non-scrolling region */
+        for (int i = region.end + rows; i < term->rows + rows; i++)
+            swap(i, i - rows);
+
+        /* Top non-scrolling region */
+        for (int i = 0 + rows; i < region.start + rows; i++)
+            swap(i, i - rows);
+
+        /* Scrolled in lines */
+        for (int r = region.start; r < region.start + rows; r++)
+            window[idx(r)] = -1;
+    }
+
+#undef swap
+#undef idx
+
+    for (int i = 0; i < count; i++)
+        dest[i] = -1;
+    for (int i = 0; i < count; i++) {
+        if (window[i] >= 0)
+            dest[window[i]] = i;
+    }
+
+    const int sb_start = (new_offset + term->rows) & mask;
+    tll(struct sixel) moved = tll_init();
+
+    tll_foreach(term->grid->sixel_images, it) {
+        struct sixel *six = &it->item;
+
+        const int start_idx = (six->pos.row - base) & mask;
+        if (start_idx >= count && start_idx + six->rows <= grid->num_rows) {
+            /* Image is entirely outside the swapped rows */
+            continue;
+        }
+
+        /* The image's rows' new (absolute) row numbers; -1 if erased */
+        int *new_rows = xmalloc(six->rows * sizeof(new_rows[0]));
+        bool unchanged = true;
+
+        for (int i = 0; i < six->rows; i++) {
+            const int old_row = (six->pos.row + i) & mask;
+            const int old_idx = (old_row - base) & mask;
+
+            if (old_idx >= count)
+                new_rows[i] = old_row;
+            else if (dest[old_idx] >= 0)
+                new_rows[i] = (base + dest[old_idx]) & mask;
+            else
+                new_rows[i] = -1;
+
+            if (new_rows[i] != old_row)
+                unchanged = false;
+        }
+
+        if (unchanged) {
+            free(new_rows);
+            continue;
+        }
+
+        struct sixel orig = *six;
+
+        /*
+         * Split the image into runs of rows that are still
+         * consecutive after the scroll. A run may not cross the grid
+         * wrap-around, nor continue from the bottom of the screen
+         * into the scrollback.
+         */
+        for (int i = 0; i < orig.rows; ) {
+            if (new_rows[i] < 0) {
+                i++;
+                continue;
+            }
+
+            int n = 1;
+            while (i + n < orig.rows &&
+                   new_rows[i + n] == new_rows[i + n - 1] + 1 &&
+                   new_rows[i + n] != sb_start)
+            {
+                n++;
+            }
+
+            tll_push_back(
+                moved, sixel_slice_rows(term, &orig, i, n, new_rows[i]));
+            i += n;
+        }
+
+        free(new_rows);
+        tll_remove(term->grid->sixel_images, it);
+        sixel_erase(term, &orig);
+    }
+
+    free(window);
+    free(dest);
+
+    tll_foreach(moved, it) {
+        sixel_damage(term, &it->item);
+        sixel_insert(term, it->item);
+        tll_remove(moved, it);
     }
 
     term->bits_affecting_ascii_printer.sixels =
@@ -1239,6 +1471,19 @@ sixel_unhook(struct terminal *term)
     /* Initial sixel coordinates */
     int start_row = do_scroll ? term->grid->cursor.point.row : 0;
     const int start_col = do_scroll ? term->grid->cursor.point.col : 0;
+
+    /*
+     * Only a full screen scrolling region scrolls the image's rows
+     * onto the screen. Otherwise (e.g. the cursor is below the
+     * scrolling region), rows past the screen bottom may not even be
+     * allocated: clip the image at the screen bottom.
+     */
+    if (do_scroll &&
+        (term->scroll_region.start != 0 ||
+         term->scroll_region.end != term->rows))
+    {
+        rows_avail = min(rows_avail, term->rows - start_row);
+    }
 
     /* Total number of rows needed by image */
     const int rows_needed =
