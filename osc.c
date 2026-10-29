@@ -245,11 +245,15 @@ osc_from_clipboard(struct terminal *term, const char *source)
 
     /* Use clipboard if no source has been specified */
     char src = source[0] == '\0' ? 'c' : 0;
-    bool from_clipboard = src == 'c';
-    bool from_primary = false;
+    enum {
+        SRC_UNSPECIFIED = -1,
+        SRC_NO_DATA,
+        SRC_HAS_DATA,
+    } from_clipboard = src == 'c' ? SRC_HAS_DATA : SRC_UNSPECIFIED,
+      from_primary = SRC_UNSPECIFIED;
 
     for (const char *s = source;
-         *s != '\0' && !from_clipboard && !from_primary;
+         *s != '\0' && from_clipboard != SRC_HAS_DATA && from_primary != SRC_HAS_DATA;
          s++)
     {
         if (*s == 'c' || *s == 'p' || *s == 's') {
@@ -269,7 +273,7 @@ osc_from_clipboard(struct terminal *term, const char *source)
             LOG_WARN("unimplemented: clipboard source '%c'", *s);
     }
 
-    if (!from_clipboard && !from_primary)
+    if (from_clipboard == SRC_UNSPECIFIED && from_primary == SRC_UNSPECIFIED)
         return;
 
     if (term->is_sending_paste_data) {
@@ -294,12 +298,10 @@ osc_from_clipboard(struct terminal *term, const char *source)
     struct clip_context *ctx = xmalloc(sizeof(*ctx));
     *ctx = (struct clip_context) {.seat = seat, .term = term};
 
-    if (from_clipboard) {
+    if (from_clipboard != SRC_UNSPECIFIED && from_primary != SRC_HAS_DATA) {
         text_from_clipboard(
             seat, term, true, &from_clipboard_cb, &from_clipboard_done, ctx);
-    }
-
-    if (from_primary) {
+    } else {
         text_from_primary(
             seat, term, true, &from_clipboard_cb, &from_clipboard_done, ctx);
     }
