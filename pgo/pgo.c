@@ -299,6 +299,9 @@ main(int argc, const char *const *argv)
         .tweak = {
             .delayed_render_lower_ns = 500000,         /* 0.5ms */
             .delayed_render_upper_ns = 16666666 / 2,   /* half a frame period (60Hz) */
+            .sixel = true,
+            .kitty_graphics = true,
+            .kitty_graphics_storage_limit = 320 * 1024 * 1024,
         },
     };
 

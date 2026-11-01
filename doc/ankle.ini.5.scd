@@ -2574,6 +2574,17 @@ any of these options.
 	Boolean. When enabled, ankle will process sixel images. Default:
 	_yes_
 
+*kitty-graphics*
+	Boolean. When enabled, ankle will process images sent with the
+	kitty terminal graphics protocol (*\\E\_G ... \\E\\*). See
+	*ankle-ctlseqs*(7). Default: _yes_
+
+*kitty-graphics-storage-limit*
+	Maximum amount of memory, in MB, used for kitty graphics image
+	data (decoded pixels, including animation frames). When a new
+	image would exceed the limit, the oldest images are evicted;
+	images that are not displayed go first. Default: _320_
+
 *dim-amount*
 	Amount by which dimmed text is darkened. Default: _1.5_.
 

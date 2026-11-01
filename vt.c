@@ -17,6 +17,7 @@
 #include "dcs.h"
 #include "debug.h"
 #include "osc.h"
+#include "kitty-graphics.h"
 #include "sixel.h"
 #include "util.h"
 #include "xmalloc.h"
@@ -44,6 +45,7 @@ enum state {
     STATE_DCS_PASSTHROUGH,
 
     STATE_SOS_PM_APC_STRING,
+    STATE_APC_STRING,
 
     STATE_UTF8_21,
     STATE_UTF8_31,
@@ -74,6 +76,7 @@ static const char *const state_names[] = {
     [STATE_DCS_PASSTHROUGH] = "DCS passthrough",
 
     [STATE_SOS_PM_APC_STRING] = "sos/pm/apc string",
+    [STATE_APC_STRING] = "apc string",
 
     [STATE_UTF8_21] = "UTF8 2-byte 1/2",
     [STATE_UTF8_31] = "UTF8 3-byte 1/3",
@@ -629,6 +632,59 @@ action_osc_put(struct terminal *term, uint8_t c)
 }
 
 static void
+action_apc_start(struct terminal *term, uint8_t c)
+{
+    term->vt.apc.idx = 0;
+    term->vt.apc.overflow = false;
+}
+
+static void
+action_apc_put(struct terminal *term, uint8_t c)
+{
+    struct vt *vt = &term->vt;
+
+    /* Only kitty graphics ("G") commands are of interest */
+    if (unlikely(vt->apc.overflow))
+        return;
+    if (vt->apc.idx == 0 && c != 'G') {
+        vt->apc.overflow = true;
+        return;
+    }
+
+    if (unlikely(vt->apc.idx >= vt->apc.size)) {
+        size_t new_size = vt->apc.size == 0 ? 4096 : vt->apc.size * 2;
+        if (new_size > KITTY_MAX_APC_SIZE) {
+            LOG_WARN("APC sequence too long; ignoring");
+            vt->apc.overflow = true;
+            return;
+        }
+        vt->apc.data = xrealloc(vt->apc.data, new_size);
+        vt->apc.size = new_size;
+    }
+
+    vt->apc.data[vt->apc.idx++] = c;
+}
+
+static void
+action_apc_end(struct terminal *term, uint8_t c)
+{
+    struct vt *vt = &term->vt;
+
+    if (!vt->apc.overflow && vt->apc.idx > 0 && vt->apc.data[0] == 'G')
+        kitty_graphics_command(term, &vt->apc.data[1], vt->apc.idx - 1);
+
+    vt->apc.idx = 0;
+    vt->apc.overflow = false;
+
+    /* Don't hang on to huge buffers */
+    if (unlikely(vt->apc.size > 64 * 1024)) {
+        free(vt->apc.data);
+        vt->apc.data = NULL;
+        vt->apc.size = 0;
+    }
+}
+
+static void
 action_hook(struct terminal *term, uint8_t c)
 {
     dcs_hook(term, c);
@@ -796,7 +852,8 @@ state_escape_switch(struct terminal *term, uint8_t data)
     case 0x5b:                                                                            action_clear(term);              return STATE_CSI_ENTRY;
     case 0x5c:                                           action_esc_dispatch(term, data);                                  return STATE_GROUND;
     case 0x5d:                                                                            action_osc_start(term, data);    return STATE_OSC_STRING;
-    case 0x5e ... 0x5f:                                                                                                    return STATE_SOS_PM_APC_STRING;
+    case 0x5e:                                                                                                             return STATE_SOS_PM_APC_STRING;
+    case 0x5f:                                                                            action_apc_start(term, data);    return STATE_APC_STRING;
     case 0x60 ... 0x7e:                                  action_esc_dispatch(term, data);                                  return STATE_GROUND;
     case 0x7f:                                           action_ignore(term);                                              return STATE_ESCAPE;
     }
@@ -1036,6 +1093,24 @@ state_sos_pm_apc_string_switch(struct terminal *term, uint8_t data)
 }
 
 static enum state
+state_apc_string_switch(struct terminal *term, uint8_t data)
+{
+    switch (data) {
+        /*              exit                             current                          enter                            new state */
+    default:                                             action_apc_put(term, data);                                       return STATE_APC_STRING;
+
+    case 0x00 ... 0x17:
+    case 0x19:
+    case 0x1c ... 0x1f:                                  action_ignore(term);                                              return STATE_APC_STRING;
+
+    case 0x18:
+    case 0x1a:          action_apc_start(term, data);    action_execute(term, data);                                       return STATE_GROUND;
+
+    case 0x1b:          action_apc_end(term, data);      action_clear(term);                                               return STATE_ESCAPE;
+    }
+}
+
+static enum state
 state_utf8_21_switch(struct terminal *term, uint8_t data)
 {
     switch (data) {
@@ -1119,6 +1194,7 @@ vt_from_slave(struct terminal *term, const uint8_t *data, size_t len)
         case STATE_DCS_IGNORE:          current_state = state_dcs_ignore_switch(term, *p); break;
         case STATE_DCS_PASSTHROUGH:     current_state = state_dcs_passthrough_switch(term, *p); break;
         case STATE_SOS_PM_APC_STRING:   current_state = state_sos_pm_apc_string_switch(term, *p); break;
+        case STATE_APC_STRING:          current_state = state_apc_string_switch(term, *p); break;
 
         case STATE_UTF8_21:             current_state = state_utf8_21_switch(term, *p); break;
         case STATE_UTF8_31:             current_state = state_utf8_31_switch(term, *p); break;

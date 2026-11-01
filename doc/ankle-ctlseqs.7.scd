@@ -829,6 +829,22 @@ and are terminated by *\\E\\* (ST).
 |  \\EP + q <hex encoded capability name> \\E\\ 
 :  Query builtin terminfo database (XTGETTCAP)
 
+# APC
+
+[[ *Sequence*
+:< *Description*
+|  \\E\_G <control data> ; <payload> \\E\\ 
+:  Kitty terminal graphics protocol
+   (https://sw.kovidgoyal.net/kitty/graphics-protocol/). Supported:
+   transmission of RGB, RGBA, PNG and palette indexed (8/16) images,
+   zlib compression, chunked transfers, files, temporary files and
+   shared memory; placements (source rectangles, scaling, pixel
+   offsets, z-index above and below the text, relative placements);
+   Unicode placeholders; animation (frames, composition and
+   control); deletion; queries and feature queries. Can be disabled
+   with *tweak.kitty-graphics*. Palette indexed images use the
+   colors at the time they are received.
+
 
 # FOOTNOTE
 

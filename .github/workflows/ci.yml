@@ -33,7 +33,7 @@ jobs:
           pacman -Syu --noconfirm --needed
           base-devel git meson ninja clang
           wayland wayland-protocols libxkbcommon pixman
-          fontconfig freetype2 harfbuzz libutf8proc
+          fontconfig freetype2 harfbuzz libutf8proc libpng zlib
           ncurses scdoc ttf-dejavu
 
       - uses: actions/checkout@v4

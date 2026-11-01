@@ -160,6 +160,9 @@ struct row {
     } shell_integration;
 };
 
+struct kitty_placement;
+struct kitty_graphics;
+
 struct sixel {
     /*
      * These three members reflect the "current", maybe scaled version
@@ -241,6 +244,7 @@ struct grid {
 
     tll(struct damage) scroll_damage;
     tll(struct sixel) sixel_images;
+    tll(struct kitty_placement *) kitty_placements;
 
     struct {
         enum kitty_kbd_flags flags[8];
@@ -286,6 +290,13 @@ struct vt {
         size_t idx;
         bool bel; /* true if OSC string was terminated by BEL */
     } osc;
+
+    struct {
+        uint8_t *data;
+        size_t size;
+        size_t idx;
+        bool overflow;
+    } apc;
 
     /* Start coordinate for current OSC-8 URI */
     struct {
@@ -872,6 +883,9 @@ struct terminal {
 
     /* State, to handle chunked notifications */
     struct notification kitty_notification;
+
+    /* Kitty graphics protocol state; allocated on first use */
+    struct kitty_graphics *kitty_gfx;
 
     /* Currently active notifications, from foot's perspective (their
        notification helper processes are still running) */

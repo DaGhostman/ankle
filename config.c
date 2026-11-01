@@ -3344,6 +3344,23 @@ parse_section_tweak(struct context *ctx)
     else if (streq(key, "sixel"))
         return value_to_bool(ctx, &conf->tweak.sixel);
 
+    else if (streq(key, "kitty-graphics"))
+        return value_to_bool(ctx, &conf->tweak.kitty_graphics);
+
+    else if (streq(key, "kitty-graphics-storage-limit")) {
+        uint32_t mb;
+        if (!value_to_uint32(ctx, 10, &mb))
+            return false;
+
+        if (mb == 0 || mb > 16384) {
+            LOG_CONTEXTUAL_ERR("must be between 1 and 16384 (MB)");
+            return false;
+        }
+
+        conf->tweak.kitty_graphics_storage_limit = (size_t)mb * 1024 * 1024;
+        return true;
+    }
+
     else if (streq(key, "dim-amount"))
         return value_to_float(ctx, &conf->dim.amount);
 
@@ -4131,6 +4148,8 @@ config_load(struct config *conf, const char *conf_path,
             .box_drawing_solid_shades = true,
             .font_monospace_warn = true,
             .sixel = true,
+            .kitty_graphics = true,
+            .kitty_graphics_storage_limit = 320 * 1024 * 1024,
             .surface_bit_depth = SHM_BITS_AUTO,
             .min_stride_alignment = 256,
             .preapply_damage = true,

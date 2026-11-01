@@ -1992,6 +1992,22 @@ test_section_tweak(void)
     test_uint32(&ctx, &parse_section_tweak, "min-stride-alignment",
                 &conf.tweak.min_stride_alignment);
 
+    test_boolean(&ctx, &parse_section_tweak, "kitty-graphics",
+                 &conf.tweak.kitty_graphics);
+
+    /* Storage limit, in MB */
+    {
+        ctx.key = "kitty-graphics-storage-limit";
+        ctx.value = "64";
+        xassert(parse_section_tweak(&ctx));
+        xassert(conf.tweak.kitty_graphics_storage_limit == 64ul * 1024 * 1024);
+
+        ctx.value = "0";
+        xassert(!parse_section_tweak(&ctx));
+        ctx.value = "abc";
+        xassert(!parse_section_tweak(&ctx));
+    }
+
 #if 0 /* Must be equal to, or less than INT32_MAX */
     test_uint32(&ctx, &parse_section_tweak, "max-shm-pool-size-mb",
                 &conf.tweak.max_shm_pool_size);

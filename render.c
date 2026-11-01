@@ -42,6 +42,7 @@
 #include "selection.h"
 #include "shaping.h"
 #include "shm.h"
+#include "kitty-graphics.h"
 #include "sixel.h"
 #include "srgb.h"
 #include "url-mode.h"
@@ -1375,6 +1376,14 @@ render_cell(struct terminal *term, pixman_image_t *pix,
         PIXMAN_OP_SRC, pix, &bg, 1,
         &(pixman_rectangle16_t){x, y, cell_cols * width, height});
 
+    /* Kitty graphics images below the text */
+    if (unlikely(kitty_has_below(term))) {
+        const bool default_bg =
+            cell->attrs.bg_src == COLOR_DEFAULT &&
+            !cell->attrs.reverse && !is_selected;
+        kitty_render_below(term, pix, x, y, cell_cols * width, height, default_bg);
+    }
+
     if (cell->attrs.blink && term->blink.fd < 0) {
         /* TODO: use a custom lock for this? */
         mtx_lock(&term->render.workers.lock);
@@ -1390,6 +1399,12 @@ render_cell(struct terminal *term, pixman_image_t *pix,
     if (cell->wc == 0 || cell->wc >= CELL_SPACER || cell->wc == U'\t' ||
         (unlikely(cell->attrs.conceal) && !is_selected))
     {
+        goto draw_cursor;
+    }
+
+    /* Kitty graphics Unicode placeholder */
+    if (unlikely(kitty_has_virtual(term)) && kitty_is_placeholder(term, cell)) {
+        kitty_render_placeholder(term, pix, row, col, x, y);
         goto draw_cursor;
     }
 
@@ -4015,6 +4030,7 @@ grid_render(struct terminal *term)
     pixman_region32_t damage;
     pixman_region32_init(&damage);
 
+    kitty_render_prepare(term);
     render_sixel_images(term, buf->pix[0], &damage, &cursor);
 
 
@@ -4058,6 +4074,9 @@ grid_render(struct terminal *term)
 
     /* Workers are idle; safe to evict cached runs */
     shaping_cache_frame_done(term->render.shaping_cache);
+
+    /* Kitty graphics images above the text */
+    kitty_render_above(term, buf->pix[0], &damage);
 
     for (size_t i = 0; i < term->render.workers.count; i++)
         pixman_region32_union(&damage, &damage, &buf->dirty[i + 1]);

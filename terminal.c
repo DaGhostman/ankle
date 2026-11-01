@@ -39,6 +39,7 @@
 #include "selection.h"
 #include "shaping.h"
 #include "shm.h"
+#include "kitty-graphics.h"
 #include "sixel.h"
 #include "slave.h"
 #include "spawn.h"
@@ -868,6 +869,7 @@ term_set_fonts(struct terminal *term, struct fcft_font *fonts[static 4],
     LOG_INFO("cell width=%d, height=%d", term->cell_width, term->cell_height);
 
     sixel_cell_size_changed(term);
+    kitty_cell_size_changed(term);
 
     /* Optimization - some code paths (are forced to) call
      * render_resize() after this function */
@@ -1918,6 +1920,7 @@ term_destroy(struct terminal *term)
     urls_reset(term);
 
     free(term->vt.osc.data);
+    free(term->vt.apc.data);
     free(term->vt.osc8.uri);
 
     composed_free(term->composed);
@@ -1997,6 +2000,7 @@ term_destroy(struct terminal *term)
         notify_icon_free(&term->notification_icons[i]);
 
     sixel_fini(term);
+    kitty_graphics_fini(term);
 
     term_ime_reset(term);
 
@@ -2195,6 +2199,7 @@ term_reset(struct terminal *term, bool hard)
 
     free(term->vt.osc8.uri);
     free(term->vt.osc.data);
+    free(term->vt.apc.data);
 
     term->vt = (struct vt){
         .state = 0,     /* STATE_GROUND */
@@ -2218,6 +2223,8 @@ term_reset(struct terminal *term, bool hard)
         sixel_destroy(&it->item);
         tll_remove(term->alt.sixel_images, it);
     }
+
+    kitty_graphics_reset(term);
 
     notify_free(term, &term->kitty_notification);
     tll_foreach(term->active_notifications, it) {
@@ -2931,6 +2938,8 @@ term_erase_scrollback(struct terminal *term)
     if (scrollback_history_size == 0)
         return;
 
+    kitty_erase_scrollback(term);
+
     const int start = (grid->offset + term->rows) & mask;
     const int end = (grid->offset - 1) & mask;
 
@@ -3120,6 +3129,9 @@ term_test_destroy(struct terminal *term)
     free(term->normal.rows);
     tll_free(term->normal.scroll_damage);
     tll_free(term->normal.sixel_images);
+    kitty_graphics_fini(term);
+    kitty_grid_free(&term->normal);
+    free(term->vt.apc.data);
 }
 
 void
@@ -3679,8 +3691,11 @@ term_scroll_partial(struct terminal *term, struct scroll_region region, int rows
 
     const bool full_screen = region.start == 0 && region.end == term->rows;
 
-    if (likely(full_screen))
+    if (likely(full_screen)) {
         sixel_scroll_up(term, rows);
+        kitty_scroll_up(term, rows);
+    } else
+        kitty_scroll_partial(term, region, rows, false);
 
     /* How many lines from the scrollback start is the current viewport? */
     int view_sb_start_distance = grid_row_abs_to_sb(
@@ -3771,8 +3786,11 @@ term_scroll_reverse_partial(struct terminal *term,
 
     const bool full_screen = region.start == 0 && region.end == term->rows;
 
-    if (likely(full_screen))
+    if (likely(full_screen)) {
         sixel_scroll_down(term, rows);
+        kitty_scroll_down(term, rows);
+    } else
+        kitty_scroll_partial(term, region, rows, true);
 
     const bool view_follows = term->grid->view == term->grid->offset;
     term->grid->offset -= rows;
