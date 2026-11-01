@@ -94,6 +94,10 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   an idle window uses no power. Rendering is still done on the CPU;
   frames are copied to an OpenGL texture and presented with EGL.
   Requires building with `-Dshaders=enabled`.
+* Thirteen animated cursor effects, ported from
+  [ghostty-cursor-fx](https://github.com/Avarce/ghostty-cursor-fx)
+  (MIT), installed to `share/ankle/shaders/cursor-fx` with
+  `-Dshaders=enabled`. Each has an `.ini` preset to `include`.
 * Ligature support: runs of text are shaped together, allowing fonts
   to render ligatures and contextual alternates (e.g. Monaspace's
   texture healing). Controlled with the new `ligatures` option

@@ -677,6 +677,11 @@ re-applied on top of the reloaded configuration.
 	compiler's error in the log. Shader files are reloaded when they
 	change (with *auto-reload-config*).
 	
+	Thirteen animated cursor effects, ported from ghostty-cursor-fx,
+	are installed in _share/ankle/shaders/cursor-fx_ (relative to
+	ankle's installation prefix), each with an _.ini_ preset to
+	*include*.
+	
 	Requires ankle to be built with *-Dshaders=enabled* (check with
 	*ankle --version*), and OpenGL 3.3. An empty value disables
 	shaders.

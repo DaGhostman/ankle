@@ -429,6 +429,10 @@ if scdoc.found()
   subdir('doc')
 endif
 
+if have_shaders
+  install_subdir('shaders', install_dir: join_paths(get_option('datadir'), 'ankle'))
+endif
+
 if get_option('themes')
   install_subdir('themes', install_dir: join_paths(get_option('datadir'), 'ankle'))
 endif
