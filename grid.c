@@ -9,6 +9,7 @@
 #include "log.h"
 #include "debug.h"
 #include "macros.h"
+#include "kitty-graphics.h"
 #include "sixel.h"
 #include "stride.h"
 #include "util.h"
@@ -284,6 +285,7 @@ grid_snapshot(const struct grid *grid)
     clone->rows = xcalloc(grid->num_rows, sizeof(clone->rows[0]));
     memset(&clone->scroll_damage, 0, sizeof(clone->scroll_damage));
     memset(&clone->sixel_images, 0, sizeof(clone->sixel_images));
+    memset(&clone->kitty_placements, 0, sizeof(clone->kitty_placements));
 
     tll_foreach(grid->scroll_damage, it)
         tll_push_back(clone->scroll_damage, it->item);
@@ -414,6 +416,8 @@ grid_free(struct grid *grid)
         tll_remove(grid->sixel_images, it);
     }
 
+    kitty_grid_free(grid);
+
     free(grid->rows);
     tll_free(grid->scroll_damage);
 }
@@ -483,6 +487,15 @@ grid_resize_without_reflow(
         tll_push_back(untranslated_sixels, it->item);
     tll_free(grid->sixel_images);
 
+    /* Kitty placements anchored to a row; relative ones stay put */
+    tll(struct kitty_placement *) untranslated_kitty = tll_init();
+    tll_foreach(grid->kitty_placements, it) {
+        if (it->item->parent == NULL && it->item->parent_virtual_img == NULL) {
+            tll_push_back(untranslated_kitty, it->item);
+            tll_remove(grid->kitty_placements, it);
+        }
+    }
+
     int new_offset = 0;
 
     /* Copy old lines, truncating them if old rows were longer */
@@ -529,6 +542,20 @@ grid_resize_without_reflow(
             else
                 sixel_destroy(&it->item);
             tll_remove(untranslated_sixels, it);
+        }
+
+        tll_foreach(untranslated_kitty, it) {
+            if (it->item->pos.row != old_row_idx)
+                continue;
+
+            struct kitty_placement *p = it->item;
+            tll_remove(untranslated_kitty, it);
+
+            if (p->pos.col < new_cols) {
+                p->pos.row = new_row_idx;
+                tll_push_back(grid->kitty_placements, p);
+            } else
+                kitty_placement_destroy_unlinked(grid, p);
         }
 
         /* Copy URI ranges, truncating them if necessary */
@@ -631,6 +658,10 @@ grid_resize_without_reflow(
         sixel_destroy(&it->item);
     tll_free(untranslated_sixels);
 
+    tll_foreach(untranslated_kitty, it)
+        kitty_placement_destroy_unlinked(grid, it->item);
+    tll_free(untranslated_kitty);
+
 #if defined(_DEBUG)
     for (int r = 0; r < new_screen_rows; r++)
         grid_row_in_view(grid, r);
@@ -719,6 +750,21 @@ _line_wrap(struct grid *old_grid, struct row **new_grid, struct row *row,
             if (it->item.pos.row == *row_idx) {
                 sixel_destroy(&it->item);
                 tll_remove(old_grid->sixel_images, it);
+            }
+        }
+
+        for (bool found = true; found; ) {
+            found = false;
+            tll_foreach(old_grid->kitty_placements, it) {
+                struct kitty_placement *p = it->item;
+                if (p->parent == NULL && p->parent_virtual_img == NULL &&
+                    p->pos.row == *row_idx)
+                {
+                    tll_remove(old_grid->kitty_placements, it);
+                    kitty_placement_destroy_unlinked(old_grid, p);
+                    found = true;
+                    break;
+                }
             }
         }
 
@@ -850,6 +896,15 @@ grid_resize_and_reflow(
         tll_push_back(untranslated_sixels, it->item);
     tll_free(grid->sixel_images);
 
+    /* Kitty placements anchored to a row; relative ones stay put */
+    tll(struct kitty_placement *) untranslated_kitty = tll_init();
+    tll_foreach(grid->kitty_placements, it) {
+        if (it->item->parent == NULL && it->item->parent_virtual_img == NULL) {
+            tll_push_back(untranslated_kitty, it->item);
+            tll_remove(grid->kitty_placements, it);
+        }
+    }
+
     /* Turn cursor coordinates into grid absolute coordinates */
     struct coord cursor = grid->cursor.point;
     cursor.row += grid->offset;
@@ -916,6 +971,17 @@ grid_resize_and_reflow(
 
             tll_push_back(grid->sixel_images, sixel);
             tll_remove(untranslated_sixels, it);
+        }
+
+        tll_foreach(untranslated_kitty, it) {
+            if (it->item->pos.row != old_row_idx)
+                continue;
+
+            struct kitty_placement *p = it->item;
+            p->pos.row = new_row_idx;
+            p->pos.col = min(p->pos.col, new_cols - 1);
+            tll_push_back(grid->kitty_placements, p);
+            tll_remove(untranslated_kitty, it);
         }
 
 #define line_wrap()                                                 \
@@ -1282,6 +1348,10 @@ grid_resize_and_reflow(
     tll_foreach(untranslated_sixels, it)
         sixel_destroy(&it->item);
     tll_free(untranslated_sixels);
+
+    tll_foreach(untranslated_kitty, it)
+        kitty_placement_destroy_unlinked(grid, it->item);
+    tll_free(untranslated_kitty);
 
 #if defined(TIME_REFLOW) && TIME_REFLOW
     struct timespec stop;

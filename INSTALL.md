@@ -88,9 +88,11 @@ system-wide installs and packaging.
 * fontconfig
 * freetype
 * harfbuzz
+* libpng
 * pixman
 * wayland (_client_ and _cursor_ libraries)
 * xkbcommon
+* zlib
 * utf8proc (_optional_, needed for grapheme clustering)
 * libutempter (_optional_, needed for utmp logging on Linux)
 * ulog (_optional_, needed for utmp logging on FreeBSD)

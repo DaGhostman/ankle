@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import base64
 import enum
 import fcntl
 import random
@@ -7,6 +8,7 @@ import signal
 import struct
 import sys
 import termios
+import zlib
 from typing import Any
 
 
@@ -34,6 +36,8 @@ def main() -> None:
     parser.add_argument('--attr-italic', action='store_true')
     parser.add_argument('--attr-underline', action='store_true')
     parser.add_argument('--sixel', action='store_true')
+    parser.add_argument('--kitty', action='store_true',
+                        help='kitty graphics protocol images')
     parser.add_argument('--seed', type=int)
 
     opts = parser.parse_args()
@@ -260,8 +264,132 @@ def main() -> None:
             # End sixel
             out.write('\033\\')
 
+    if opts.kitty:
+        emit_kitty_graphics(out, lines, cols, width, height)
+
     # Leave alt screen
     out.write('\033[?1049l')
+
+
+def kitty_apc(out: Any, control: str, payload: bytes = b'', chunk: int = 4096) -> None:
+    """Emit a kitty graphics command, chunking the base64 payload."""
+    data = base64.standard_b64encode(payload).decode('ascii')
+    if len(data) <= chunk:
+        out.write(f'\033_G{control};{data}\033\\' if data else f'\033_G{control}\033\\')
+        return
+
+    for i in range(0, len(data), chunk):
+        more = 1 if i + chunk < len(data) else 0
+        ctrl = f'{control},m={more}' if i == 0 else f'm={more}'
+        out.write(f'\033_G{ctrl};{data[i:i + chunk]}\033\\')
+
+
+def emit_kitty_graphics(out: Any, lines: int, cols: int, width: int, height: int) -> None:
+    """Exercise the kitty graphics protocol: transmission (raw, zlib,
+    chunked), placements above/below text, scrolling, animation
+    frames, unicode placeholders and deletion."""
+    cell_w = max(width // cols, 1)
+    cell_h = max(height // lines, 1)
+
+    def random_image(w: int, h: int, alpha: bool) -> bytes:
+        bpp = 4 if alpha else 3
+        # A few random colors in horizontal bands; cheap to generate,
+        # while still compressing reasonably
+        rows = []
+        for _ in range(h):
+            px = bytes(random.randrange(256) for _ in range(bpp))
+            rows.append(px * w)
+        return b''.join(rows)
+
+    image_ids = []
+
+    for i in range(24):
+        img_id = i + 1
+        w = random.randrange(1, max(width // 3, 2))
+        h = random.randrange(1, max(height // 3, 2))
+        alpha = bool(random.randrange(2))
+        data = random_image(w, h, alpha)
+        fmt = 32 if alpha else 24
+
+        control = f'a=t,i={img_id},f={fmt},s={w},v={h},q=2'
+        if random.randrange(2):
+            data = zlib.compress(data)
+            control += ',o=z'
+
+        kitty_apc(out, control, data)
+        image_ids.append(img_id)
+
+    # Placements: some below the text, some above, some scaled
+    for _ in range(64):
+        out.write(f'\033[{random.randrange(lines) + 1};{random.randrange(cols) + 1}H')
+
+        img_id = random.choice(image_ids)
+        z = random.choice([-1073741825, -1, 0, 1])
+        control = f'a=p,i={img_id},z={z},q=2'
+
+        if random.randrange(2):
+            control += f',c={random.randrange(1, max(cols // 4, 2))}'
+        if random.randrange(2):
+            control += f',r={random.randrange(1, max(lines // 4, 2))}'
+        if random.randrange(3) == 0:
+            control += f',X={random.randrange(cell_w)},Y={random.randrange(cell_h)}'
+        if random.randrange(3) == 0:
+            control += ',C=1'
+        if random.randrange(4) == 0:
+            control += f',p={random.randrange(1, 4)}'
+
+        kitty_apc(out, control)
+
+        # Text on top of, and around, the images
+        out.write(f'\033[3{random.randrange(8)}m')
+        out.write(''.join(chr(random.randrange(0x21, 0x7f)) for _ in range(random.randrange(cols))))
+
+    # Scroll the images, including with a scroll region
+    out.write('\033[m')
+    for _ in range(lines // 2):
+        out.write('\n' * random.randrange(1, 4))
+        out.write(f'\033[{random.randrange(lines) + 1};1H')
+        out.write(''.join(chr(random.randrange(0x21, 0x7f)) for _ in range(cols // 2)))
+
+    out.write(f'\033[2;{max(lines - 1, 3)}r')
+    for _ in range(lines // 2):
+        out.write(f'\033[{max(lines - 1, 3)};1H\n')
+    out.write('\033[r')
+
+    # Animation frames
+    w, h = max(width // 8, 1), max(height // 8, 1)
+    kitty_apc(out, f'a=T,i=1000,f=24,s={w},v={h},q=2', random_image(w, h, False))
+    for _ in range(8):
+        fw = random.randrange(1, w + 1)
+        fh = random.randrange(1, h + 1)
+        kitty_apc(
+            out,
+            f'a=f,i=1000,f=32,x={random.randrange(w - fw + 1)},y={random.randrange(h - fh + 1)},'
+            f's={fw},v={fh},c={random.randrange(1, 3)},z={random.randrange(10, 100)},q=2',
+            random_image(fw, fh, True))
+    kitty_apc(out, f'a=c,i=1000,r=2,c=3,w={w},h={h},q=2')
+    for frame in range(1, 10):
+        kitty_apc(out, f'a=a,i=1000,c={frame},q=2')
+
+    # Unicode placeholders
+    w, h = 8 * cell_w, 3 * cell_h
+    kitty_apc(out, f'a=T,U=1,i=42,f=24,s={w},v={h},c=8,r=3,q=2', random_image(w, h, False))
+    diacritics = ['\u0305', '\u030d', '\u030e']
+    out.write('\033[1;1H\033[38;5;42m')
+    for row in range(3):
+        out.write(f'\U0010EEEE{diacritics[row]}' + '\U0010EEEE' * 7 + '\r\n')
+    out.write('\033[39m')
+
+    # Deletion
+    for d in 'aipcxyzr':
+        x = random.randrange(cols) + 1
+        y = random.randrange(lines) + 1
+        img_id = random.choice(image_ids)
+        kitty_apc(out, f'a=d,d={d},i={img_id},x={x},y={y},z=-1,q=2')
+
+    for img_id in image_ids:
+        kitty_apc(out, f'a=d,d=I,i={img_id},q=2')
+    kitty_apc(out, 'a=d,d=A,q=2')
 
 
 if __name__ == '__main__':

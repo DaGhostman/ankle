@@ -512,6 +512,8 @@ struct config {
         bool box_drawing_solid_shades;
         bool font_monospace_warn;
         bool sixel;
+        bool kitty_graphics;
+        size_t kitty_graphics_storage_limit;  /* Bytes */
         enum shm_bit_depth surface_bit_depth;
         uint32_t min_stride_alignment;
         bool preapply_damage;

@@ -159,6 +159,12 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 * Terminals started with `spawn-terminal`, and `exec` commands, are
   passed an XDG activation token, so that compositors with focus
   stealing prevention focus the new window ([foot#2465][foot-2465]).
+* Kitty graphics protocol: images (RGB, RGBA, PNG; zlib compressed,
+  chunked, or read from files and shared memory), placements above
+  and below the text, Unicode placeholders, relative placements,
+  animation, and deletion ([foot#481][foot-481]). Images scroll and
+  reflow with the text. Controlled with `tweak.kitty-graphics`, with
+  image memory limited by `tweak.kitty-graphics-storage-limit`.
 
 ### Changed
 
@@ -174,6 +180,7 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   caching the glyphs of shaped text runs), and statically linked.
 * HarfBuzz is now a required dependency, and meson >= 0.63 is
   required.
+* libpng and zlib are now required dependencies (kitty graphics).
 
 ### Fixed
 
@@ -248,6 +255,7 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-1856]: https://codeberg.org/dnkl/foot/issues/1856
 [foot-1039]: https://codeberg.org/dnkl/foot/issues/1039
 [foot-2465]: https://codeberg.org/dnkl/foot/issues/2465
+[foot-481]: https://codeberg.org/dnkl/foot/issues/481
 
 
 ## Unreleased

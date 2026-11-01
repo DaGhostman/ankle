@@ -154,6 +154,8 @@ wayland_cursor = dependency('wayland-cursor')
 xkb = dependency('xkbcommon', version: '>=1.6.0')
 fontconfig = dependency('fontconfig')
 harfbuzz = dependency('harfbuzz')
+zlib = dependency('zlib')
+libpng = dependency('libpng')
 utf8proc = dependency('libutf8proc', required: get_option('grapheme-clustering'))
 
 if utf8proc.found()
@@ -283,12 +285,13 @@ vtlib = static_library(
   'dcs.c', 'dcs.h',
   'macros.h',
   'osc.c', 'osc.h',
+  'kitty-graphics.c', 'kitty-graphics.h', 'kitty-diacritics.h',
   'sixel.c', 'sixel.h',
   'vt.c', 'vt.h',
   builtin_terminfo, srgb_funcs,
   wl_proto_src + wl_proto_headers,
   version,
-  dependencies: [libepoll, pixman, fcft, tllist, wayland_client, xkb, utf8proc],
+  dependencies: [libepoll, pixman, fcft, tllist, wayland_client, xkb, utf8proc, zlib, libpng],
   link_with: [common, misc],
 )
 
