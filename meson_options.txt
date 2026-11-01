@@ -32,3 +32,6 @@ option('utmp-default-helper-path', type: 'string', value: 'auto',
        description: 'Default path to the utmp helper binary. Default: auto-detect')
 
 option('fanalyzer', type: 'boolean', value: false, description: 'enable GCC static analyzer')
+
+option('shaders', type: 'feature', value: 'disabled',
+       description: 'Ghostty compatible custom shaders (custom-shader=), presented with EGL/OpenGL. Requires egl, opengl and wayland-egl.')

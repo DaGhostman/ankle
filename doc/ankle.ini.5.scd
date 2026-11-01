@@ -644,6 +644,76 @@ re-applied on top of the reloaded configuration.
 	
 	_0.0_ disables dimming. Default: _0.0_.
 
+*custom-shader*
+	Space separated list of GLSL fragment shader files, applied to the
+	rendered terminal, in order. Each shader's output is the next
+	one's input. Paths containing spaces must be quoted. Paths may
+	start with _~/_, and relative paths are relative to the directory
+	of the configuration file. Prefix a path with _?_ to make it
+	optional (a missing file is silently skipped).
+	
+	Shaders are compatible with Ghostty's *custom-shader*: they use
+	Shadertoy's conventions (a *mainImage(out vec4 fragColor, in vec2
+	fragCoord)* function, origin in the bottom left corner) and are
+	given the same uniforms. *iChannel0* is the terminal itself;
+	*iResolution*, *iTime*, *iTimeDelta*, *iFrameRate*, *iFrame*,
+	*iChannelResolution* and *iDate* are set as in Shadertoy (*iMouse*
+	and *iSampleRate* are always zero). Ghostty's extensions are set
+	too: *iCurrentCursor* and *iPreviousCursor* (_xy_ is the cursor's
+	top left corner, _zw_ its width and height, in pixels),
+	*iCurrentCursorColor*, *iPreviousCursorColor*,
+	*iCurrentCursorStyle* and *iPreviousCursorStyle* (one of the
+	*CURSORSTYLE_BLOCK*, *CURSORSTYLE_BLOCK_HOLLOW*, *CURSORSTYLE_BAR*
+	or *CURSORSTYLE_UNDERLINE* macros), *iCursorVisible*,
+	*iTimeCursorChange* (the *iTime* of the last cursor movement),
+	*iFocus*, *iTimeFocus*, *iPalette* (the 256 color palette),
+	*iBackgroundColor*, *iForegroundColor*, *iCursorColor*,
+	*iCursorText*, *iSelectionBackgroundColor* and
+	*iSelectionForegroundColor*.
+	
+	The terminal is still rendered on the CPU; each frame is copied to
+	an OpenGL texture (only the parts that changed), and presented
+	with EGL. Shaders that fail to compile are skipped, with the
+	compiler's error in the log. Shader files are reloaded when they
+	change (with *auto-reload-config*).
+	
+	Thirteen animated cursor effects, ported from ghostty-cursor-fx,
+	are installed in _share/ankle/shaders/cursor-fx_ (relative to
+	ankle's installation prefix), each with an _.ini_ preset to
+	*include*.
+	
+	Six terminal shaders (retro-crt, amber-monitor, vhs, glow,
+	aurora-backdrop and focus-dim) are installed in
+	_share/ankle/shaders/terminal_.
+	
+	Requires ankle to be built with *-Dshaders=enabled* (check with
+	*ankle --version*), and OpenGL 3.3. An empty value disables
+	shaders.
+	Default: _not set_.
+
+*custom-shader-animation*
+	When to keep re-running *custom-shader* while the terminal itself
+	isn't changing, which is what animates a shader (e.g. cursor
+	trails, or anything using *iTime*). One of:
+	
+	- *auto*: for *custom-shader-animation-duration* milliseconds after
+	  the cursor moves, or changes, or the window gains or loses
+	  keyboard focus. Enough for cursor effects, while an idle window
+	  costs nothing.
+	- *true*: continuously, while the window has keyboard focus
+	  (Ghostty's default).
+	- *false*: never; shaders only run when the terminal content
+	  changes.
+	- *always*: continuously, for all windows.
+	
+	Animating continuously renders a frame for every display refresh,
+	which uses noticeably more power. Default: _auto_.
+
+*custom-shader-animation-duration*
+	How long, in milliseconds, to animate *custom-shader* after the
+	cursor moves, with *custom-shader-animation=auto*.
+	Default: _1000_.
+
 *vi-mode*
 	Boolean. Enables vi mode: a keyboard driven cursor for moving
 	through the scrollback, and selecting and copying text, without

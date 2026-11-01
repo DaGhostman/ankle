@@ -133,6 +133,18 @@ watches_setup(struct config_reloader *reloader)
             watch_file(reloader, real);
         free(real);
     }
+
+    /* Custom shaders are reloaded when edited, too */
+    const struct config *conf = reloader->current;
+    for (size_t i = 0; i < conf->custom_shader.count; i++) {
+        const char *path = conf->custom_shader.paths[i];
+        watch_file(reloader, path);
+
+        char *real = realpath(path, NULL);
+        if (real != NULL && !streq(real, path))
+            watch_file(reloader, real);
+        free(real);
+    }
 }
 
 static void

@@ -95,6 +95,7 @@ system-wide installs and packaging.
 * zlib
 * utf8proc (_optional_, needed for grapheme clustering)
 * resvg (_optional_, only with `-Dsvg-backend=resvg`)
+* EGL, OpenGL (libglvnd's `libOpenGL`) and wayland-egl (_optional_, only with `-Dshaders=enabled`)
 * libutempter (_optional_, needed for utmp logging on Linux)
 * ulog (_optional_, needed for utmp logging on FreeBSD)
 
@@ -203,6 +204,7 @@ Available compile-time options:
 | `-Dime`                              | bool    | `true`                  | Enables IME support                                                             | None                |
 | `-Dgrapheme-clustering`              | feature | `auto`                  | Enables grapheme clustering                                                     | libutf8proc         |
 | `-Dsvg-backend`                      | combo   | `nanosvg`               | Renderer for SVG glyphs (color emoji): `none`, `nanosvg` or `resvg`             | resvg (if `resvg`)  |
+| `-Dshaders`                          | feature | `disabled`              | Ghostty compatible custom shaders (`custom-shader`)                             | EGL, OpenGL, wayland-egl |
 | `-Dterminfo`                         | feature | `enabled`               | Build and install terminfo files                                                | tic (ncurses)       |
 | `-Ddefault-terminfo`                 | string  | `foot`                  | Default value of `TERM`                                                         | None                |
 | `-Dterminfo-base-name`               | string  | `-Ddefault-terminfo`    | Base name of the generated terminfo files                                       | None                |
@@ -225,6 +227,13 @@ C library (`libresvg` and `resvg.h`) installed. Some distributions
 package it (e.g. Arch's `resvg`); otherwise build it with `cargo
 build --release` in resvg's `crates/c-api` directory. `none` disables
 SVG glyphs.
+
+`-Dshaders`: enables the `custom-shader` option. Ankle still renders
+on the CPU; when shaders are configured, frames are copied to an
+OpenGL (3.3 core) texture, run through the shaders, and presented
+with EGL. Without configured shaders, EGL is never initialized, and
+nothing changes. Any Mesa driver works, including software rendering
+(llvmpipe), but that is slow.
 
 `-Dsystemd-units-dir`: the default, `${systemduserunitdir}`, is a
 system directory (typically `/usr/lib/systemd/user`), regardless of

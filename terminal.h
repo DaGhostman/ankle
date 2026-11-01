@@ -756,6 +756,9 @@ struct terminal {
         /* Shaped text runs, used when rendering ligatures */
         struct shaping_cache *shaping_cache;
 
+        /* Custom shaders (EGL/OpenGL state); NULL when not in use */
+        struct shader_state *shader;
+
         /* Last rendered cursor position */
         struct {
             struct row *row;

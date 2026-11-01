@@ -84,6 +84,27 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 
 ### Added
 
+* Custom shaders, compatible with Ghostty's: `custom-shader` applies
+  one or more GLSL (Shadertoy style) fragment shaders to the
+  terminal, with the same uniforms as Ghostty (including the cursor
+  ones, used by cursor trail effects). `custom-shader-animation`
+  (`auto`, `true`, `false` or `always`) controls when shaders
+  animate; the default, `auto`, only animates for a short while
+  (`custom-shader-animation-duration`) after the cursor moves, so that
+  an idle window uses no power. Rendering is still done on the CPU;
+  frames are copied to an OpenGL texture and presented with EGL.
+  Requires building with `-Dshaders=enabled`.
+* Thirteen animated cursor effects, ported from
+  [ghostty-cursor-fx](https://github.com/Avarce/ghostty-cursor-fx)
+  (MIT), installed to `share/ankle/shaders/cursor-fx` with
+  `-Dshaders=enabled`. Each has an `.ini` preset to `include`.
+* Matching cursor trails for seven of the cursor effects (aurora,
+  cyber, embers, glitch, katana, lightning and neon), chained in by
+  their presets.
+* Six terminal shaders, installed to `share/ankle/shaders/terminal`
+  with `-Dshaders=enabled`: `retro-crt` (with a rolling interference
+  line), `amber-monitor`, `vhs`, `glow`, `aurora-backdrop` and
+  `focus-dim`.
 * Ligature support: runs of text are shaped together, allowing fonts
   to render ligatures and contextual alternates (e.g. Monaspace's
   texture healing). Controlled with the new `ligatures` option

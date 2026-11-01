@@ -37,6 +37,7 @@
 #include "reaper.h"
 #include "render.h"
 #include "selection.h"
+#include "shader.h"
 #include "shaping.h"
 #include "shm.h"
 #include "kitty-graphics.h"
@@ -1684,6 +1685,7 @@ fdm_shutdown(struct fdm *fdm, int fd, int events, void *data)
     /* Kill the event FD */
     fdm_del(term->fdm, fd);
 
+    shader_destroy(term);
     wayl_win_destroy(term->window);
     term->window = NULL;
 
@@ -1892,6 +1894,7 @@ term_destroy(struct terminal *term)
         fdm_del(term->fdm, term->shutdown.terminate_timeout_fd);
 
     if (term->window != NULL) {
+        shader_destroy(term);
         wayl_win_destroy(term->window);
         term->window = NULL;
     }
@@ -2735,6 +2738,9 @@ term_config_reload(struct terminal *term, const struct config *conf)
         if (!load_fonts_from_conf(term))
             LOG_ERR("failed to reload fonts");
     }
+
+    /* Recompiles shaders, or switches them on/off */
+    shader_reload(term);
 
     term_damage_view(term);
     term_damage_margins(term);

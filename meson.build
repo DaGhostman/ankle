@@ -210,6 +210,21 @@ if (wayland_protocols.version().version_compare('>=1.45'))
   add_project_arguments('-DHAVE_EXT_BACKGROUND_EFFECT=1', language: 'c')
 endif
 
+# Custom (Ghostty compatible) shaders
+egl = dependency('egl', required: get_option('shaders'))
+opengl = dependency('opengl', required: get_option('shaders'))
+wayland_egl = dependency('wayland-egl', required: get_option('shaders'))
+have_shaders = egl.found() and opengl.found() and wayland_egl.found()
+
+shader_sources = []
+shader_deps = []
+if have_shaders
+  add_project_arguments('-DANKLE_SHADERS_ENABLED=1', language: 'c')
+  shader_sources = ['shader.c']
+  shader_deps = [egl, opengl, wayland_egl]
+endif
+
+
 foreach prot : wl_proto_xml
   wl_proto_headers += custom_target(
     prot.underscorify() + '-client-header',
@@ -358,9 +373,10 @@ executable(
   'user-notification.c', 'user-notification.h',
   'wayland.c', 'wayland.h', 'shm-formats.h',
   'xkbcommon-vmod.h',
+  'shader.h', shader_sources,
   srgb_funcs, wl_proto_src + wl_proto_headers, version,
   dependencies: [math, threads, libepoll, pixman, wayland_client, wayland_cursor, xkb, fontconfig, utf8proc,
-                 harfbuzz, tllist, fcft],
+                 harfbuzz, tllist, fcft] + shader_deps,
   link_with: pgolib,
   install: true)
 
@@ -413,6 +429,10 @@ if scdoc.found()
   subdir('doc')
 endif
 
+if have_shaders
+  install_subdir('shaders', install_dir: join_paths(get_option('datadir'), 'ankle'))
+endif
+
 if get_option('themes')
   install_subdir('themes', install_dir: join_paths(get_option('datadir'), 'ankle'))
 endif
@@ -458,6 +478,7 @@ summary(
     'Documentation': scdoc.found(),
     'Themes': get_option('themes'),
     'IME': get_option('ime'),
+    'Custom shaders': have_shaders,
     'SVG glyph backend (fcft)': get_option('svg-backend'),
     'Grapheme clustering': utf8proc.found(),
     'utmp backend': utmp_backend,

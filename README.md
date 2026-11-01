@@ -53,6 +53,10 @@ source](#installing).
 * **Bundled, patched fcft.** Ankle always builds its own copy of
   [fcft](https://codeberg.org/dnkl/fcft), patched to cache the glyphs
   of shaped text, which keeps ligature rendering fast.
+* **Custom shaders**, compatible with Ghostty's `custom-shader`
+  (CRT, bloom, cursor trails, ...), built with `-Dshaders=enabled`.
+  Thirteen animated cursor effects ship with it, in
+  `share/ankle/shaders/cursor-fx`; see [Cursor effects](#cursor-effects).
 * **Fixes** for a few memory safety and robustness bugs that are still
   open in foot (see the [changelog](CHANGELOG.md#ankle-unreleased)).
 
@@ -67,6 +71,9 @@ source](#installing).
 | `auto-reload-config` | `[main]` | `yes` | Reload the configuration when its files change |
 | `opaque-fullscreen` | `[main]` | `no` | Make fullscreened windows opaque, like foot does |
 | `config-reload` | `[key-bindings]` | _none_ | Key binding that reloads the configuration |
+| `custom-shader` | `[main]` | _empty_ | GLSL shaders applied to the terminal, Ghostty compatible (needs `-Dshaders=enabled`) |
+| `custom-shader-animation` | `[main]` | `auto` | `auto`, `true`, `false` or `always`: when shaders keep animating |
+| `custom-shader-animation-duration` | `[main]` | `1000` | Milliseconds to animate after the cursor moves, with `auto` |
 
 Also new:
 
@@ -94,6 +101,75 @@ font-features=calt liga ss01 ss02 ss03 ss04 ss05 ss06 ss07 ss08 ss09 ss10
 Characters are only shaped together when they use the same font and
 style; e.g. a `-` followed by a **bold** `>` is drawn as two separate
 characters.
+
+
+### Cursor effects
+
+With `-Dshaders=enabled`, ankle installs thirteen animated cursor
+effects (aurora, cyber, embers, fireworks, glitch, hologram, katana,
+lightning, mecha, neon, phosphor, shockwave and teleport), ported from
+[ghostty-cursor-fx](https://github.com/Avarce/ghostty-cursor-fx). Each
+one comes with a preset that sets the shader and the cursor's color.
+Seven of them (aurora, cyber, embers, glitch, katana, lightning and
+neon) also get a matching trail when the cursor moves more than a
+couple of cells: a ribbon of northern light, dissolving pixels,
+drifting sparks, stuttering RGB ghosts, a curved sword slash, a
+crackling bolt and a streak of neon. The trails were written for
+ankle (`*-trail.glsl`); their presets chain them before the cursor
+effect. Include the preset at the end of your `ankle.ini`:
+
+```ini
+[main]
+include=/usr/share/ankle/shaders/cursor-fx/lightning.ini
+```
+
+Each effect's settings are the `const` lines at the top of its
+`.glsl` file. Copy the file (and its `.ini`) somewhere of your own to
+tune them; ankle reloads a shader as soon as it is saved. The effects
+look their best with a block cursor and a dark theme. Their idle
+animations (breathing, crackling) run for a moment after each
+keystroke with the default `custom-shader-animation=auto`; set it to
+`true` to keep them going while the window is focused.
+
+The originals' Enter and "done" moments, driven by Claude Code and zsh
+hooks, are switched off in the ported versions (`ENTER_EFFECT`,
+`DONE_EFFECT`); the typing, jump and prompt mark (`❯`) effects work as
+they are.
+
+
+### Terminal shaders
+
+Six shaders for the whole terminal are installed alongside them, in
+`share/ankle/shaders/terminal`:
+
+| Shader | What it does | Animation |
+|--------|--------------|-----------|
+| `retro-crt.glsl` | Curved tube, scanlines, aperture grille, glow, flicker, and an interference line rolling down the screen every few seconds | `always` |
+| `amber-monitor.glsl` | Monochrome amber phosphor screen (green and white variants in the file) | not needed |
+| `vhs.glsl` | Colour bleed, wobble, a drifting tracking band and the occasional burst of torn lines | `always` |
+| `glow.glsl` | Soft bloom around bright text | not needed |
+| `aurora-backdrop.glsl` | Northern lights drifting behind the text; only the background colour is replaced | `true` |
+| `focus-dim.glsl` | Fades unfocused windows to a muted grey | not needed (`auto`) |
+
+```ini
+[main]
+custom-shader=/usr/share/ankle/shaders/terminal/retro-crt.glsl
+custom-shader-animation=always
+```
+
+The settings are the `#define` lines at the top of each file.
+Shaders can be chained; to combine one with a cursor effect, list the
+cursor effect first so it gets the same treatment as the text:
+
+```ini
+[main]
+include=/usr/share/ankle/shaders/cursor-fx/neon.ini
+custom-shader=/usr/share/ankle/shaders/cursor-fx/neon-cursor.glsl /usr/share/ankle/shaders/terminal/retro-crt.glsl
+custom-shader-animation=always
+```
+
+`always` keeps the GPU busy even while the terminal is idle, so the
+animated ones cost some battery.
 
 
 ## Switching from foot
@@ -190,6 +266,10 @@ Conduct](CODE_OF_CONDUCT.md).
   consider [supporting foot's author](https://liberapay.com/dnkl).
 * [Ordoviz](https://codeberg.org/Ordoviz), for designing foot's
   logo, which was ankle's original icon.
+* [AONIR](https://github.com/Avarce), for
+  [ghostty-cursor-fx](https://github.com/Avarce/ghostty-cursor-fx),
+  the cursor effects in `shaders/cursor-fx` (MIT license; see
+  [shaders/cursor-fx/LICENSE](shaders/cursor-fx/LICENSE)).
 
 
 ## License

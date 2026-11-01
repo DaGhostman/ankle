@@ -548,6 +548,43 @@ test_font_size_presets(struct context *ctx, struct config *conf)
 }
 
 static void
+test_custom_shaders(struct context *ctx, struct config *conf)
+{
+    ctx->key = "custom-shader";
+
+    /* Relative to the configuration file; '?' marks optional files */
+    ctx->path = "/etc/ankle/ankle.ini";
+    ctx->value = "crt.glsl ?/abs/bloom.glsl \"with space.glsl\"";
+    if (!parse_section_main(ctx))
+        BUG("[main].custom-shader=%s: failed to parse", ctx->value);
+
+    if (conf->custom_shader.count != 3 ||
+        !streq(conf->custom_shader.paths[0], "/etc/ankle/crt.glsl") ||
+        !streq(conf->custom_shader.paths[1], "/abs/bloom.glsl") ||
+        !streq(conf->custom_shader.paths[2], "/etc/ankle/with space.glsl") ||
+        conf->custom_shader.optional[0] ||
+        !conf->custom_shader.optional[1] ||
+        conf->custom_shader.optional[2])
+    {
+        BUG("[main].custom-shader=%s: wrong list", ctx->value);
+    }
+
+    /* Syntax errors leave the current list as is */
+    ctx->value = "\"unterminated";
+    if (parse_section_main(ctx))
+        BUG("[main].custom-shader=%s: did not fail to parse", ctx->value);
+    if (conf->custom_shader.count != 3)
+        BUG("[main].custom-shader=%s: modified the list", ctx->value);
+
+    /* Empty clears the list */
+    ctx->value = "";
+    if (!parse_section_main(ctx) || conf->custom_shader.count != 0)
+        BUG("[main].custom-shader=: did not clear the list");
+
+    ctx->path = "unittest";
+}
+
+static void
 test_unit_float(struct context *ctx, bool (*parse_fun)(struct context *ctx),
                 const char *key, const float *ptr)
 {
@@ -610,6 +647,16 @@ test_section_main(void)
     test_unit_float(&ctx, &parse_section_main, "dim-unfocused", &conf.dim_unfocused);
     test_unit_float(&ctx, &parse_section_main, "alpha-adjustment", &conf.alpha_adjustment);
     test_font_size_presets(&ctx, &conf);
+    test_custom_shaders(&ctx, &conf);
+    test_enum(
+        &ctx, &parse_section_main, "custom-shader-animation",
+        4,
+        (const char *[]){"auto", "true", "false", "always"},
+        (int []){SHADER_ANIMATION_AUTO, SHADER_ANIMATION_TRUE,
+                 SHADER_ANIMATION_FALSE, SHADER_ANIMATION_ALWAYS},
+        (int *)&conf.custom_shader.animation);
+    test_uint32(&ctx, &parse_section_main, "custom-shader-animation-duration",
+                &conf.custom_shader.animation_duration);
     test_boolean(&ctx, &parse_section_main, "ligatures", &conf.ligatures.enabled);
     {
         ctx.key = "ligatures";

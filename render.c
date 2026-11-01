@@ -41,6 +41,7 @@
 #include "search.h"
 #include "selection.h"
 #include "shaping.h"
+#include "shader.h"
 #include "shm.h"
 #include "kitty-graphics.h"
 #include "sixel.h"
@@ -2269,6 +2270,12 @@ render_ime_preedit_for_seat(struct terminal *term, struct seat *seat,
     wl_surface_damage_buffer(
         term->window->surface.surf,
         damage_x, damage_y, damage_w, damage_h);
+
+    /* Not part of the cell damage; track it, so that it's included
+     * when the buffer's damage is consumed (e.g. by custom shaders) */
+    pixman_region32_union_rect(
+        &buf->dirty[0], &buf->dirty[0],
+        damage_x, damage_y, damage_w, damage_h);
 }
 #endif
 
@@ -3788,6 +3795,108 @@ dirty_cursor(struct terminal *term)
     row->dirty = true;
 }
 
+/*
+ * Collects the state custom shaders need (cursor geometry etc).
+ *
+ * The cursor rectangle mirrors what draw_cursor() paints.
+ */
+static void
+shader_frame_info_collect(const struct terminal *term,
+                          struct shader_frame_info *info)
+{
+    *info = (struct shader_frame_info){
+        .cursor_visible = !term->hide_cursor,
+        .focused = term->kbd_focus,
+    };
+
+    const struct coord cursor = cursor_in_view(term);
+    if (cursor.row < 0 || cursor.row >= term->rows ||
+        cursor.col < 0 || cursor.col >= term->cols)
+    {
+        return;
+    }
+
+    enum cursor_style style = term->cursor_style;
+    bool shown = term->cursor_blink.state == CURSOR_BLINK_ON;
+
+    if (!term->kbd_focus) {
+        switch (term->conf->cursor.unfocused_style) {
+        case CURSOR_UNFOCUSED_UNCHANGED:
+            /* Unfocused cursors don't blink (except hollow ones) */
+            if (style != CURSOR_HOLLOW)
+                shown = true;
+            break;
+
+        case CURSOR_UNFOCUSED_HOLLOW:
+            style = CURSOR_HOLLOW;
+            shown = true;
+            break;
+
+        case CURSOR_UNFOCUSED_NONE:
+            return;
+        }
+    }
+
+    if (!shown)
+        return;
+
+    const struct row *row = grid_row_in_view(term->grid, cursor.row);
+    const struct cell *cell = &row->cells[cursor.col];
+
+    /* Wide characters are followed by spacer cells */
+    int cols = 1;
+    while (cursor.col + cols < term->cols &&
+           row->cells[cursor.col + cols].wc > CELL_SPACER)
+    {
+        cols++;
+    }
+
+    const struct fcft_font *font = term->fonts[0];
+    const int x = term->margins.left + cursor.col * term->cell_width;
+    const int y = term->margins.top + cursor.row * term->cell_height;
+
+    info->cursor_drawn = true;
+    info->cursor_x = x;
+    info->cursor_y = y;
+    info->cursor_width = cols * term->cell_width;
+    info->cursor_height = term->cell_height;
+
+    switch (style) {
+    case CURSOR_BLOCK:
+        info->cursor_style = SHADER_CURSOR_BLOCK;
+        break;
+
+    case CURSOR_HOLLOW:
+        info->cursor_style = SHADER_CURSOR_BLOCK_HOLLOW;
+        break;
+
+    case CURSOR_BEAM:
+        info->cursor_style = SHADER_CURSOR_BAR;
+        info->cursor_y = y + term->font_baseline - font->ascent;
+        info->cursor_width = term_pt_or_px_as_pixels(
+            term, &term->conf->cursor.beam_thickness);
+        info->cursor_height = font->ascent + font->descent;
+        break;
+
+    case CURSOR_UNDERLINE: {
+        const int thickness = term->conf->cursor.underline_thickness.px >= 0
+            ? term_pt_or_px_as_pixels(
+                term, &term->conf->cursor.underline_thickness)
+            : font->underline.thickness;
+
+        info->cursor_style = SHADER_CURSOR_UNDERLINE;
+        info->cursor_y = y + min(underline_offset(term, font) + thickness,
+                                 term->cell_height - thickness);
+        info->cursor_height = thickness;
+        break;
+    }
+    }
+
+    info->cursor_color = (term->colors.cursor_bg >> 31
+                          ? term->colors.cursor_bg
+                          : cell_colors(term, cell).fg) & 0xffffff;
+}
+
 static void
 grid_render(struct terminal *term)
 {
@@ -4209,6 +4318,15 @@ grid_render(struct terminal *term)
     if (term->conf->tweak.damage_whole_window) {
         wl_surface_damage_buffer(
             term->window->surface.surf, 0, 0, INT32_MAX, INT32_MAX);
+    }
+
+    if (unlikely(shader_configured(term))) {
+        struct shader_frame_info info;
+        shader_frame_info_collect(term, &info);
+
+        /* Presents (and commits) through the shader chain */
+        if (shader_present(term, buf, &info))
+            return;
     }
 
     wl_surface_attach(term->window->surface.surf, buf->wl_buf, 0, 0);
@@ -4807,6 +4925,20 @@ render_update_title(struct terminal *term)
     free(copy);
 }
 
+/* Re-runs custom shaders on the last frame, without re-rendering it */
+static void
+render_shader_animation_frame(struct terminal *term)
+{
+    xassert(term->window->frame_callback == NULL);
+    term->window->frame_callback = wl_surface_frame(term->window->surface.surf);
+    wl_callback_add_listener(term->window->frame_callback, &frame_listener, term);
+
+    if (!shader_render_animation_frame(term)) {
+        wl_callback_destroy(term->window->frame_callback);
+        term->window->frame_callback = NULL;
+    }
+}
+
 static void
 frame_callback(void *data, struct wl_callback *wl_callback, uint32_t callback_data)
 {
@@ -4846,6 +4978,8 @@ frame_callback(void *data, struct wl_callback *wl_callback, uint32_t callback_da
 
     if ((grid && !term->delayed_render_timer.is_armed) || (csd | search | urls))
         grid_render(term);
+    else if (unlikely(shader_wants_animation_frame(term)))
+        render_shader_animation_frame(term);
 
     tll_foreach(term->wl->seats, it) {
         if (it->item.ime_focus == term)

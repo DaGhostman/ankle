@@ -30,6 +30,10 @@ jobs:
             cc: gcc
             options: --buildtype=debug -Db_sanitize=address,undefined -Dsvg-backend=resvg
             packages: resvg
+          - name: clang (release, shaders)
+            cc: clang
+            options: --buildtype=release -Dshaders=enabled
+            packages: libglvnd mesa
 
     steps:
       - name: Install dependencies

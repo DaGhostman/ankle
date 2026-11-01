@@ -458,6 +458,10 @@ struct wayland {
 
     struct wl_display *display;
     struct wl_registry *registry;
+
+    /* We have called wl_display_prepare_read(), but not yet
+     * wl_display_read_events()/wl_display_cancel_read() */
+    bool read_prepared;
 #if defined(WL_FIXES_INTERFACE)
     struct wl_fixes *fixes;
     int fixes_version;
@@ -571,3 +575,11 @@ bool wayl_get_activation_token(
 void wayl_activate(struct wayland *wayl, struct wl_window *win, const char *token);
 
 bool wayl_do_linear_blending(const struct wayland *wayl, const struct config *conf);
+
+/*
+ * Temporarily give up our prepared read, so that other users of the
+ * Wayland connection (EGL) can read events without deadlocking.
+ * Returns the token to pass to wayl_read_resume().
+ */
+bool wayl_read_suspend(struct wayland *wayl);
+void wayl_read_resume(struct wayland *wayl, bool token);
