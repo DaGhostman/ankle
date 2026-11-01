@@ -110,7 +110,13 @@ effects (aurora, cyber, embers, fireworks, glitch, hologram, katana,
 lightning, mecha, neon, phosphor, shockwave and teleport), ported from
 [ghostty-cursor-fx](https://github.com/Avarce/ghostty-cursor-fx). Each
 one comes with a preset that sets the shader and the cursor's color.
-Include the preset at the end of your `ankle.ini`:
+Seven of them (aurora, cyber, embers, glitch, katana, lightning and
+neon) also get a matching trail when the cursor moves more than a
+couple of cells: a ribbon of northern light, dissolving pixels,
+drifting sparks, stuttering RGB ghosts, a curved sword slash, a
+crackling bolt and a streak of neon. The trails were written for
+ankle (`*-trail.glsl`); their presets chain them before the cursor
+effect. Include the preset at the end of your `ankle.ini`:
 
 ```ini
 [main]

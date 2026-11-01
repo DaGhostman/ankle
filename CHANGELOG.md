@@ -98,6 +98,9 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   [ghostty-cursor-fx](https://github.com/Avarce/ghostty-cursor-fx)
   (MIT), installed to `share/ankle/shaders/cursor-fx` with
   `-Dshaders=enabled`. Each has an `.ini` preset to `include`.
+* Matching cursor trails for seven of the cursor effects (aurora,
+  cyber, embers, glitch, katana, lightning and neon), chained in by
+  their presets.
 * Six terminal shaders, installed to `share/ankle/shaders/terminal`
   with `-Dshaders=enabled`: `retro-crt` (with a rolling interference
   line), `amber-monitor`, `vhs`, `glow`, `aurora-backdrop` and
