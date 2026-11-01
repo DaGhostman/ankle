@@ -1,0 +1,633 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 19:30:00 +0000
+Subject: [PATCH] svg: add a resvg backend, with multi-glyph document support
+
+Adds -Dsvg-backend=resvg, an OT-SVG backend using the resvg C
+library. Unlike nanosvg, resvg can render a single element of a
+document by its ID, so "multi-glyph" documents (one SVG document
+holding many glyphs, each the element with id "glyph<index>") are
+rendered correctly, instead of being rejected (fcft#120).
+
+Parsed multi-glyph documents are cached, since they can be very large
+(OpenMoji's picosvgz font has a single ~9MB document covering ~3700
+glyphs).
+
+Glyph scaling and placement mirrors the nanosvg backend.
+---
+ fcft.c              |  10 +-
+ meson.build         |  14 ++
+ meson_options.txt   |   4 +-
+ svg-backend-resvg.c | 511 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ svg-backend-resvg.h |   6 +
+ 5 files changed, 542 insertions(+), 3 deletions(-)
+
+diff --git a/fcft.c b/fcft.c
+index 509ab6b..52dd8fb 100644
+--- a/fcft.c
++++ b/fcft.c
+@@ -48,6 +48,9 @@
+ #if defined(FCFT_ENABLE_SVG_LIBRSVG)
+  #include "3rd-party/freetype-rsvg/rsvg-port.h"
+ #endif
++#if defined(FCFT_ENABLE_SVG_RESVG)
++ #include "svg-backend-resvg.h"
++#endif
+ 
+ #define min(x, y) ((x) < (y) ? (x) : (y))
+ #define max(x, y) ((x) > (y) ? (x) : (y))
+@@ -199,7 +202,8 @@ fcft_capabilities(void)
+ #if defined(FCFT_HAVE_HARFBUZZ) && defined(FCFT_HAVE_UTF8PROC)
+     ret |= FCFT_CAPABILITY_TEXT_RUN_SHAPING;
+ #endif
+-#if defined(FCFT_ENABLE_SVG_LIBRSVG) || defined(FCFT_ENABLE_SVG_NANOSVG)
++#if defined(FCFT_ENABLE_SVG_LIBRSVG) || defined(FCFT_ENABLE_SVG_NANOSVG) || \
++    defined(FCFT_ENABLE_SVG_RESVG)
+     ret |= FCFT_CAPABILITY_SVG;
+ #endif
+ 
+@@ -235,6 +239,8 @@ fcft_init(enum fcft_log_colorize colorize, bool do_syslog,
+     FT_Property_Set(ft_lib, "ot-svg", "svg-hooks", &nanosvg_hooks);
+ #elif defined(FCFT_ENABLE_SVG_LIBRSVG)
+     FT_Property_Set(ft_lib, "ot-svg", "svg-hooks", &rsvg_hooks);
++#elif defined(FCFT_ENABLE_SVG_RESVG)
++    FT_Property_Set(ft_lib, "ot-svg", "svg-hooks", &resvg_hooks);
+ #endif
+ 
+     FcInit();
+@@ -359,6 +365,8 @@ log_version_information(void)
+         "(librsvg)",
+ #elif defined(FCFT_ENABLE_SVG_NANOSVG)
+         "(nanosvg)",
++#elif defined(FCFT_ENABLE_SVG_RESVG)
++        "(resvg)",
+ #else
+         "",
+ #endif
+diff --git a/meson.build b/meson.build
+index 74fc02a..ce9540a 100644
+--- a/meson.build
++++ b/meson.build
+@@ -103,6 +103,20 @@ if freetype.version().version_compare('>=24.2.18')  # 2.12.0, TODO: double-check
+     add_project_arguments(
+       ['-DHAVE_LIBRSVG', '-DFCFT_ENABLE_SVG_LIBRSVG=1'], language: 'c')
+ 
++  elif get_option('svg-backend') == 'resvg'
++    # resvg's C API doesn't ship a pkg-config file; fall back to
++    # looking for the library and header directly
++    libresvg = dependency('resvg', required: false)
++    if not libresvg.found()
++      libresvg = cc.find_library('resvg', has_headers: ['resvg.h'])
++    endif
++    rsvg = declare_dependency(
++      sources: ['svg-backend-resvg.c', 'svg-backend-resvg.h'],
++      dependencies: [libresvg, math])
++    nanosvg = declare_dependency()
++    svg_backend = 'resvg'
++    add_project_arguments('-DFCFT_ENABLE_SVG_RESVG=1', language: 'c')
++
+   elif get_option('svg-backend') == 'nanosvg'
+     if system_nanosvg.found() and system_nanosvgrast.found()
+       nanosvg = declare_dependency(
+diff --git a/meson_options.txt b/meson_options.txt
+index 21aae96..6d07294 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -1,6 +1,6 @@
+-option('svg-backend', type: 'combo', choices: ['none', 'nanosvg'],
++option('svg-backend', type: 'combo', choices: ['none', 'nanosvg', 'resvg'],
+        value: 'nanosvg',
+-       description: 'enables support for SVG glyphs (none: disable, nanosvg: bundled)')
++       description: 'enables support for SVG glyphs (none: disable, nanosvg: bundled, resvg: system libresvg, supports multi-glyph documents)')
+ option('system-nanosvg', type: 'feature', value: 'disabled',
+        description: 'use system\'s nanosvg instead of the bundled version')
+ option(
+diff --git a/svg-backend-resvg.c b/svg-backend-resvg.c
+new file mode 100644
+index 0000000..056fe67
+--- /dev/null
++++ b/svg-backend-resvg.c
+@@ -0,0 +1,511 @@
++#include <stdbool.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <math.h>
++#include <assert.h>
++#include <threads.h>
++
++#include <ft2build.h>
++#include FT_OTSVG_H
++
++#define LOG_MODULE "fcft/svg"
++#define LOG_ENABLE_DBG 0
++#include "log.h"
++
++#include <resvg.h>
++
++#include "svg-backend-resvg.h"
++
++/*
++ * OT-SVG backend using resvg.
++ *
++ * Unlike nanosvg, resvg can render a single element of a document,
++ * by its ID. This lets us support "multi-glyph" documents: a single
++ * SVG document that holds many glyphs (and often shares <defs>
++ * between them), where each glyph is the element with id
++ * "glyph<glyph-index>".
++ *
++ * Such documents can be huge (OpenMoji's picosvgz font has a single
++ * ~9MB document covering ~3700 glyphs), and parsing one takes
++ * hundreds of milliseconds. We therefore keep a small cache of
++ * parsed multi-glyph documents. Single-glyph documents are small,
++ * and are parsed on demand.
++ *
++ * Glyph placement and scaling mirrors the nanosvg backend: the
++ * glyph's bounding box is scaled to fit the em square, centered
++ * horizontally, and centered on the line vertically.
++ *
++ * resvg's bounding boxes of groups are not reliable for this (empty
++ * groups, common in OpenMoji, extend them to the canvas origin), so
++ * the glyph's actual bounds are found by rendering it once, at a low
++ * resolution, and looking at which pixels it covered.
++ */
++
++struct state {
++    uint32_t cookie;  /* For debugging, to ensure the 'generic' field
++                       * is ours */
++    float scale;
++    float x_ofs;
++    float y_ofs;
++    resvg_rect doc_bbox;
++    bool render_node;  /* false: render the whole document */
++    FT_Error error;
++};
++
++#define COOKIE 0xfcf7e5e6
++
++#define min(x, y) ((x) < (y) ? (x) : (y))
++#define max(x, y) ((x) > (y) ? (x) : (y))
++
++struct cache_entry {
++    resvg_render_tree *tree;
++    size_t len;
++    uint64_t hash;
++    uint64_t last_use;
++};
++
++/* Each parsed multi-glyph document can use tens of MB */
++#define CACHE_SIZE 2
++
++static mtx_t lock;
++static resvg_options *options;
++static struct cache_entry cache[CACHE_SIZE];
++static uint64_t use_counter;
++
++static void
++slot_state_finalizer(void *object)
++{
++    FT_GlyphSlot slot = object;
++    struct state *state = slot->generic.data;
++
++    assert(state == NULL || state->cookie == COOKIE);
++
++    free(state);
++    slot->generic.data = NULL;
++    slot->generic.finalizer = NULL;
++}
++
++/*
++ * FreeType hands us a pointer to the document, but that pointer is
++ * not a stable key: gzip-compressed documents are decompressed into
++ * a temporary buffer for each glyph load. Identify documents by
++ * their length, and a hash of a sample of their content instead.
++ */
++static uint64_t
++fnv1a(uint64_t hash, const uint8_t *data, size_t len)
++{
++    for (size_t i = 0; i < len; i++) {
++        hash ^= data[i];
++        hash *= 0x100000001b3ull;
++    }
++    return hash;
++}
++
++static uint64_t
++document_hash(const uint8_t *data, size_t len)
++{
++    const size_t chunk = 256;
++    uint64_t hash = 0xcbf29ce484222325ull;
++
++    if (len <= 64 * chunk)
++        return fnv1a(hash, data, len);
++
++    for (size_t i = 0; i < 64; i++) {
++        size_t ofs = (len - chunk) / 63 * i;
++        hash = fnv1a(hash, &data[ofs], chunk);
++    }
++    return hash;
++}
++
++static resvg_render_tree *
++tree_parse(FT_SVG_Document document)
++{
++    resvg_render_tree *tree = NULL;
++    int32_t err = resvg_parse_tree_from_data(
++        (const char *)document->svg_document,
++        document->svg_document_length, options, &tree);
++
++    if (err != RESVG_OK) {
++        LOG_ERR("failed to parse SVG document (resvg error %d)", err);
++        return NULL;
++    }
++    return tree;
++}
++
++/*
++ * Returns a parsed tree for the document. For multi-glyph documents,
++ * the tree is owned by the cache, and 'lock' is held on return; it
++ * must be released with tree_release().
++ */
++static resvg_render_tree *
++tree_acquire(FT_SVG_Document document, bool *cached)
++{
++    *cached = document->start_glyph_id != document->end_glyph_id;
++    if (!*cached)
++        return tree_parse(document);
++
++    const size_t len = document->svg_document_length;
++    const uint64_t hash = document_hash(document->svg_document, len);
++
++    mtx_lock(&lock);
++
++    struct cache_entry *victim = &cache[0];
++    for (size_t i = 0; i < CACHE_SIZE; i++) {
++        struct cache_entry *e = &cache[i];
++        if (e->tree != NULL && e->len == len && e->hash == hash) {
++            e->last_use = ++use_counter;
++            return e->tree;
++        }
++
++        if (e->tree == NULL ||
++            (victim->tree != NULL && e->last_use < victim->last_use))
++        {
++            victim = e;
++        }
++    }
++
++    LOG_DBG("parsing multi-glyph SVG document (%zu bytes, glyphs %hu-%hu)",
++            len, document->start_glyph_id, document->end_glyph_id);
++
++    resvg_render_tree *tree = tree_parse(document);
++    if (tree == NULL) {
++        mtx_unlock(&lock);
++        return NULL;
++    }
++
++    if (victim->tree != NULL)
++        resvg_tree_destroy(victim->tree);
++
++    victim->tree = tree;
++    victim->len = len;
++    victim->hash = hash;
++    victim->last_use = ++use_counter;
++    return tree;
++}
++
++static void
++tree_release(resvg_render_tree *tree, bool cached)
++{
++    if (cached)
++        mtx_unlock(&lock);
++    else if (tree != NULL)
++        resvg_tree_destroy(tree);
++}
++
++/*
++ * Renders the glyph, mapping SVG coordinates p to pixels as
++ * scale * (p - origin) + ofs. For a node (id != NULL), origin is the
++ * top-left corner of the node's bounding box, as determined by
++ * resvg_render_node(). For the whole document, it is the top-left
++ * corner of doc_bbox.
++ */
++static bool
++draw(const resvg_render_tree *tree, const char *id,
++     const resvg_rect *doc_bbox, float scale, float x_ofs, float y_ofs,
++     uint32_t width, uint32_t height, uint8_t *buf)
++{
++    if (id != NULL) {
++        resvg_transform transform = {scale, 0, 0, scale, x_ofs, y_ofs};
++        return resvg_render_node(
++            tree, id, transform, width, height, (char *)buf);
++    }
++
++    resvg_transform transform = {
++        scale, 0, 0, scale,
++        x_ofs - doc_bbox->x * scale, y_ofs - doc_bbox->y * scale};
++    resvg_render(tree, transform, width, height, (char *)buf);
++    return true;
++}
++
++static FT_Error
++fcft_svg_init(FT_Pointer *state)
++{
++    *state = NULL;
++
++    if (mtx_init(&lock, mtx_plain) != thrd_success)
++        return FT_Err_Out_Of_Memory;
++
++    options = resvg_options_create();
++    if (options == NULL) {
++        mtx_destroy(&lock);
++        return FT_Err_Out_Of_Memory;
++    }
++
++    return FT_Err_Ok;
++}
++
++static void
++fcft_svg_free(FT_Pointer *state)
++{
++    for (size_t i = 0; i < CACHE_SIZE; i++) {
++        if (cache[i].tree != NULL)
++            resvg_tree_destroy(cache[i].tree);
++        cache[i] = (struct cache_entry){0};
++    }
++
++    resvg_options_destroy(options);
++    options = NULL;
++    mtx_destroy(&lock);
++}
++
++static FT_Error
++fcft_svg_render(FT_GlyphSlot slot, FT_Pointer *_state)
++{
++    assert(*_state == NULL);
++
++    struct state *state = (struct state *)slot->generic.data;
++    assert(state->cookie == COOKIE);
++
++    if (state->error != FT_Err_Ok)
++        return state->error;
++
++    FT_SVG_Document document = (FT_SVG_Document)slot->other;
++    FT_Bitmap *bitmap = &slot->bitmap;
++
++    if (bitmap->width == 0 || bitmap->rows == 0)
++        goto done;
++
++    /* resvg requires a tightly packed pixmap */
++    assert(bitmap->pitch == (int)bitmap->width * 4);
++    memset(bitmap->buffer, 0, (size_t)bitmap->pitch * bitmap->rows);
++
++    bool cached;
++    resvg_render_tree *tree = tree_acquire(document, &cached);
++    if (tree == NULL)
++        return FT_Err_Invalid_SVG_Document;
++
++    char id[32];
++    snprintf(id, sizeof(id), "glyph%u", slot->glyph_index);
++
++    if (!draw(tree, state->render_node ? id : NULL, &state->doc_bbox,
++              state->scale, state->x_ofs, state->y_ofs,
++              bitmap->width, bitmap->rows, bitmap->buffer))
++    {
++        LOG_ERR("failed to render SVG element '%s'", id);
++        tree_release(tree, cached);
++        return FT_Err_Invalid_SVG_Document;
++    }
++
++    tree_release(tree, cached);
++
++    /* resvg produces premultiplied RGBA, while FreeType expects
++     * premultiplied BGRA */
++    for (size_t r = 0; r < bitmap->rows; r++) {
++        uint8_t *row = &bitmap->buffer[r * bitmap->pitch];
++        for (size_t c = 0; c < bitmap->width * 4; c += 4) {
++            uint8_t red = row[c + 0];
++            row[c + 0] = row[c + 2];
++            row[c + 2] = red;
++        }
++    }
++
++done:
++    bitmap->pixel_mode = FT_PIXEL_MODE_BGRA;
++    bitmap->num_grays  = 256;
++    slot->format = FT_GLYPH_FORMAT_BITMAP;
++    return FT_Err_Ok;
++}
++
++static FT_Error
++fcft_svg_preset_slot(FT_GlyphSlot slot, FT_Bool cache, FT_Pointer *_state)
++{
++    assert(*_state == NULL);
++    struct state *state = NULL;
++    struct state state_dummy = {0};
++
++    FT_SVG_Document  document = (FT_SVG_Document)slot->other;
++    FT_Size_Metrics  metrics  = document->metrics;
++
++    if (cache) {
++        if (slot->generic.data == NULL) {
++            slot->generic.data = calloc(1, sizeof(*state));
++            slot->generic.finalizer = &slot_state_finalizer;
++            ((struct state *)slot->generic.data)->cookie = COOKIE;
++        }
++        state = slot->generic.data;
++        state->error = FT_Err_Ok;
++        assert(state->cookie == COOKIE);
++    } else
++        state = &state_dummy;
++
++    bool cached;
++    resvg_render_tree *tree = tree_acquire(document, &cached);
++    if (tree == NULL) {
++        state->error = FT_Err_Invalid_SVG_Document;
++        return FT_Err_Invalid_SVG_Document;
++    }
++
++    /*
++     * The OT-SVG spec says the glyph is the element with ID
++     * "glyph<glyph-index>". This is mandatory for multi-glyph
++     * documents. Single-glyph documents normally have it too, but
++     * fall back to rendering the whole document if they don't.
++     */
++    char id[32];
++    snprintf(id, sizeof(id), "glyph%u", slot->glyph_index);
++
++    resvg_rect bbox;
++    if (resvg_get_node_stroke_bbox(tree, id, &bbox))
++        state->render_node = true;
++    else if (!cached && resvg_get_image_bbox(tree, &bbox))
++        state->render_node = false;
++    else {
++        LOG_DBG("no SVG element '%s' in document (glyphs %hu-%hu)",
++                id, document->start_glyph_id, document->end_glyph_id);
++        tree_release(tree, cached);
++        state->error = FT_Err_Invalid_SVG_Document;
++        return FT_Err_Invalid_SVG_Document;
++    }
++
++    state->doc_bbox = bbox;
++
++    /*
++     * Find the glyph's actual bounds by rendering it into a probe
++     * bitmap. resvg's bounding box is used only to pick the probe's
++     * resolution. The probe is larger than the bounding box, in case
++     * the box resvg_render_node() renders relative to is larger
++     * still (e.g. because of filters).
++     */
++    const float max_ppem = max(metrics.x_ppem, metrics.y_ppem);
++    const float probe_res = min(max(4 * max_ppem, 64), 256);
++    const float probe_scale =
++        bbox.width > 0 && bbox.height > 0
++        ? probe_res / max(bbox.width, bbox.height)
++        : 0;
++
++    const uint32_t probe_width = ceilf(bbox.width * probe_scale) * 2;
++    const uint32_t probe_height = ceilf(bbox.height * probe_scale) * 2;
++
++    uint32_t ink_x0 = UINT32_MAX, ink_y0 = UINT32_MAX;
++    uint32_t ink_x1 = 0, ink_y1 = 0;
++
++    if (probe_width > 0 && probe_height > 0) {
++        uint8_t *probe = calloc((size_t)probe_width * probe_height, 4);
++        if (probe == NULL) {
++            tree_release(tree, cached);
++            state->error = FT_Err_Out_Of_Memory;
++            return FT_Err_Out_Of_Memory;
++        }
++
++        if (draw(tree, state->render_node ? id : NULL, &bbox,
++                 probe_scale, 0, 0, probe_width, probe_height, probe))
++        {
++            for (uint32_t y = 0; y < probe_height; y++) {
++                const uint8_t *row = &probe[(size_t)y * probe_width * 4];
++                for (uint32_t x = 0; x < probe_width; x++) {
++                    if (row[x * 4 + 3] == 0)
++                        continue;
++                    ink_x0 = min(ink_x0, x);
++                    ink_x1 = max(ink_x1, x + 1);
++                    ink_y0 = min(ink_y0, y);
++                    ink_y1 = max(ink_y1, y + 1);
++                }
++            }
++        }
++
++        free(probe);
++    }
++
++    tree_release(tree, cached);
++
++    float width = 0, height = 0;
++
++    if (ink_x0 < ink_x1 && ink_y0 < ink_y1) {
++        /* The glyph's bounds, in SVG units */
++        const float ink_width = (ink_x1 - ink_x0) / probe_scale;
++        const float ink_height = (ink_y1 - ink_y0) / probe_scale;
++
++        float x_scale = (float)metrics.x_ppem / ink_width;
++        float y_scale = (float)metrics.y_ppem / ink_height;
++        state->scale = min(x_scale, y_scale);
++        state->x_ofs = -(ink_x0 / probe_scale) * state->scale;
++        state->y_ofs = -(ink_y0 / probe_scale) * state->scale;
++
++        width = ink_width * state->scale;
++        height = ink_height * state->scale;
++    } else {
++        /* Nothing to draw (e.g. a space) */
++        state->scale = 0;
++        state->x_ofs = state->y_ofs = 0;
++    }
++
++    LOG_DBG(
++        "%s: bbox: x=%.2f, y=%.2f, %.2fx%.2f, x-ppem=%hu, y-ppem=%hu, "
++        "target width=%.2f, target height=%.2f, scale=%f",
++        id, bbox.x, bbox.y, bbox.width, bbox.height,
++        metrics.x_ppem, metrics.y_ppem, width, height, state->scale);
++
++    /*
++     * User transformations (see svg-backend-nanosvg.c); normally,
++     * fcft doesn't set any. The exception is FontConfig's FC_MATRIX,
++     * typically used to simulate italics, which we ignore: slanted
++     * emoji don't look good anyway.
++     */
++    if (document->transform.xx != 1 << 16 ||
++        document->transform.yy != 1 << 16 ||
++        document->transform.xy != 0 || document->transform.yx != 0 ||
++        document->delta.x != 0 || document->delta.y != 0)
++    {
++        static bool have_warned = false;
++        if (!have_warned) {
++            LOG_WARN("user transformations not supported");
++            have_warned = true;
++        }
++    }
++
++    float descender = metrics.descender / 64.;
++    float line_height = metrics.height / 64.;
++    float baseline = line_height + descender;
++
++    slot->bitmap.rows = ceilf(height);
++    slot->bitmap.width = ceilf(width);
++
++    /* Centered */
++    slot->bitmap_left = metrics.x_ppem >= width
++        ? ((float)metrics.x_ppem - width) / 2.
++        : 0;
++
++    /* Center the glyph on the *line* (i.e. *not* around the
++     * baseline); see svg-backend-nanosvg.c */
++    float line_center = (line_height - height) / 2.;
++    slot->bitmap_top = baseline >= line_center && line_center >= 0
++        ? baseline - (line_height - height) / 2.
++        : 0;
++
++    slot->bitmap.pitch = slot->bitmap.width * 4;
++    slot->bitmap.pixel_mode = FT_PIXEL_MODE_BGRA;
++
++    LOG_DBG("bitmap: x=%d, y=%d, width=%d, height=%d, scale=%f",
++            slot->bitmap_left, slot->bitmap_top,
++            slot->bitmap.width, slot->bitmap.rows, state->scale);
++
++    float horiBearingX = 0.;
++    float horiBearingY = -slot->bitmap_top;
++
++    float vertBearingX =
++        slot->metrics.horiBearingX / 64.0f - slot->metrics.horiAdvance / 64.0f / 2;
++    float vertBearingY =
++        (slot->metrics.vertAdvance / 64.0f - slot->metrics.height / 64.0f) / 2;
++
++    slot->metrics.width  = roundf(width * 64);
++    slot->metrics.height = roundf(height * 64);
++
++    slot->metrics.horiBearingX = horiBearingX * 64;
++    slot->metrics.horiBearingY = horiBearingY * 64;
++    slot->metrics.vertBearingX = vertBearingX * 64;
++    slot->metrics.vertBearingY = vertBearingY * 64;
++
++    if (slot->metrics.vertAdvance == 0)
++        slot->metrics.vertAdvance = height * 1.2f * 64;
++
++    return FT_Err_Ok;
++}
++
++SVG_RendererHooks resvg_hooks = {
++    .init_svg = &fcft_svg_init,
++    .free_svg = &fcft_svg_free,
++    .render_svg = &fcft_svg_render,
++    .preset_slot = &fcft_svg_preset_slot,
++};
+diff --git a/svg-backend-resvg.h b/svg-backend-resvg.h
+new file mode 100644
+index 0000000..abdcc00
+--- /dev/null
++++ b/svg-backend-resvg.h
+@@ -0,0 +1,6 @@
++#pragma once
++
++#include <ft2build.h>
++#include FT_OTSVG_H
++
++extern SVG_RendererHooks resvg_hooks;

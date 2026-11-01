@@ -10,6 +10,9 @@ option('ime', type: 'boolean', value: true,
 option('grapheme-clustering', type: 'feature',
        description: 'Enables grapheme clustering using libutf8proc. Requires fcft with harfbuzz support to be useful.')
 
+option('svg-backend', type: 'combo', value: 'nanosvg', choices: ['none', 'nanosvg', 'resvg'],
+       description: 'Renderer for SVG (OpenType-SVG) glyphs, e.g. color emoji, in the bundled fcft. nanosvg: bundled; resvg: system libresvg, also handles fonts with multi-glyph SVG documents (e.g. OpenMoji)')
+
 option('tests', type: 'boolean', value: true, description: 'Build tests')
 
 option('terminfo', type: 'feature', value: 'enabled', description: 'Build and install foot\'s terminfo files.')

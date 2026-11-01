@@ -94,6 +94,7 @@ system-wide installs and packaging.
 * xkbcommon
 * zlib
 * utf8proc (_optional_, needed for grapheme clustering)
+* resvg (_optional_, only with `-Dsvg-backend=resvg`)
 * libutempter (_optional_, needed for utmp logging on Linux)
 * ulog (_optional_, needed for utmp logging on FreeBSD)
 
@@ -201,6 +202,7 @@ Available compile-time options:
 | `-Dtests`                            | bool    | `true`                  | Build tests (adds a `ninja test` build target)                                  | None                |
 | `-Dime`                              | bool    | `true`                  | Enables IME support                                                             | None                |
 | `-Dgrapheme-clustering`              | feature | `auto`                  | Enables grapheme clustering                                                     | libutf8proc         |
+| `-Dsvg-backend`                      | combo   | `nanosvg`               | Renderer for SVG glyphs (color emoji): `none`, `nanosvg` or `resvg`             | resvg (if `resvg`)  |
 | `-Dterminfo`                         | feature | `enabled`               | Build and install terminfo files                                                | tic (ncurses)       |
 | `-Ddefault-terminfo`                 | string  | `foot`                  | Default value of `TERM`                                                         | None                |
 | `-Dterminfo-base-name`               | string  | `-Ddefault-terminfo`    | Base name of the generated terminfo files                                       | None                |
@@ -211,6 +213,18 @@ Available compile-time options:
 
 Documentation includes the man pages, readme, changelog and license
 files.
+
+`-Dsvg-backend`: selects how the bundled fcft renders OpenType-SVG
+glyphs (e.g. color emoji fonts like OpenMoji or Twemoji). `nanosvg`
+(the default) is bundled, and needs nothing extra, but it cannot
+render fonts that pack many glyphs into one SVG document (OpenMoji's
+`picosvgz` variant, and, with freetype >= 2.15, more glyphs in other
+OpenMoji variants); those glyphs fall back to another font. `resvg`
+renders them correctly, but needs the [resvg](https://github.com/linebender/resvg)
+C library (`libresvg` and `resvg.h`) installed. Some distributions
+package it (e.g. Arch's `resvg`); otherwise build it with `cargo
+build --release` in resvg's `crates/c-api` directory. `none` disables
+SVG glyphs.
 
 `-Dsystemd-units-dir`: the default, `${systemduserunitdir}`, is a
 system directory (typically `/usr/lib/systemd/user`), regardless of
