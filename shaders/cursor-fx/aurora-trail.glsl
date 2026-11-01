@@ -45,9 +45,10 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float len = length(ab);
     vec2 dir = ab / len, n = vec2(-dir.y, dir.x);
 
-    float along = dot(fragCoord - a, dir) / len;
+    float along_ = dot(fragCoord - a, dir) / len;
     float tailAt = 1.0 - pow(1.0 - t, 2.5);
-    if (along < tailAt || along > 1.0) return;
+    float along = clamp(along_, tailAt, 1.0);
+    float past = abs(along_ - along) * len;      // pixels past either end
 
     float x = along * len / cellH;
     float wave = sin(x * 1.3 - iTime * 9.0) * cellH * 0.15;
@@ -55,7 +56,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float h = (along - tailAt) / max(1.0 - tailAt, 1e-3);
     float w = WIDTH * cellH * 0.5 * (0.4 + 0.6 * h);
 
-    float ribbon = smoothstep(w, 0.0, d);
+    float ribbon = smoothstep(w, 0.0, length(vec2(past, d)));
     float rays = 0.65 + 0.35 * sin(x * 9.0 + iTime * 5.0);
 
     vec3 green = vec3(0.2, 1.0, 0.6), cyan = vec3(0.2, 0.75, 1.0), violet = vec3(0.65, 0.35, 1.0);
