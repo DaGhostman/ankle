@@ -301,6 +301,22 @@ struct config {
         size_t count;
     } font_size_presets;
 
+    /* Ghostty compatible post-processing shaders (see shader.h) */
+    struct {
+        char **paths;
+        bool *optional;    /* Path was prefixed with '?' */
+        size_t count;
+
+        enum {
+            SHADER_ANIMATION_AUTO,
+            SHADER_ANIMATION_TRUE,
+            SHADER_ANIMATION_FALSE,
+            SHADER_ANIMATION_ALWAYS,
+        } animation;
+
+        uint32_t animation_duration;  /* ms, for SHADER_ANIMATION_AUTO */
+    } custom_shader;
+
     float alpha_adjustment;  /* alpha-increase/decrease step, 0.0 - 1.0 */
 
     /* Custom font metrics (-1 = use real font metrics) */

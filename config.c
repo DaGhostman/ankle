@@ -1166,6 +1166,84 @@ parse_include(struct context *ctx, bool optional)
     return ret;
 }
 
+static void
+custom_shaders_free(struct config *conf)
+{
+    for (size_t i = 0; i < conf->custom_shader.count; i++)
+        free(conf->custom_shader.paths[i]);
+    free(conf->custom_shader.paths);
+    free(conf->custom_shader.optional);
+    conf->custom_shader.paths = NULL;
+    conf->custom_shader.optional = NULL;
+    conf->custom_shader.count = 0;
+}
+
+/*
+ * A list of shader files. Paths are separated by whitespace (quote
+ * paths containing spaces), and may be prefixed with '?' to make
+ * them optional. Like Ghostty, shaders are applied in order.
+ */
+static bool NOINLINE
+value_to_custom_shaders(struct context *ctx)
+{
+    struct config *conf = ctx->conf;
+    char **argv = NULL;
+
+    if (!tokenize_cmdline(ctx->value, &argv)) {
+        LOG_CONTEXTUAL_ERR("syntax error in shader list");
+        return false;
+    }
+
+    size_t count = 0;
+    for (char **a = argv; a != NULL && *a != NULL; a++) {
+        if ((*a)[0] != '\0')
+            count++;
+    }
+
+    char **paths = count > 0 ? xcalloc(count, sizeof(paths[0])) : NULL;
+    bool *optional = count > 0 ? xcalloc(count, sizeof(optional[0])) : NULL;
+    size_t idx = 0;
+    bool ret = true;
+
+    for (char **a = argv; a != NULL && *a != NULL; a++) {
+        const char *value = *a;
+        if (value[0] == '\0')
+            continue;
+
+        const bool is_optional = value[0] == '?';
+        if (is_optional)
+            value++;
+
+        char *path = include_path_expand(ctx, value);
+        if (path == NULL) {
+            ret = false;
+            break;
+        }
+
+        paths[idx] = path;
+        optional[idx] = is_optional;
+        idx++;
+    }
+
+    for (char **a = argv; a != NULL && *a != NULL; a++)
+        free(*a);
+    free(argv);
+
+    if (!ret) {
+        for (size_t i = 0; i < idx; i++)
+            free(paths[i]);
+        free(paths);
+        free(optional);
+        return false;
+    }
+
+    custom_shaders_free(conf);
+    conf->custom_shader.paths = paths;
+    conf->custom_shader.optional = optional;
+    conf->custom_shader.count = idx;
+    return true;
+}
+
 static bool
 parse_section_main(struct context *ctx)
 {
@@ -1429,6 +1507,21 @@ parse_section_main(struct context *ctx)
         conf->alpha_adjustment = amount;
         return true;
     }
+
+    else if (streq(key, "custom-shader"))
+        return value_to_custom_shaders(ctx);
+
+    else if (streq(key, "custom-shader-animation")) {
+        _Static_assert(sizeof(conf->custom_shader.animation) == sizeof(int),
+                       "enum is not 32-bit");
+        return value_to_enum(
+            ctx,
+            (const char *[]){"auto", "true", "false", "always", NULL},
+            (int *)&conf->custom_shader.animation);
+    }
+
+    else if (streq(key, "custom-shader-animation-duration"))
+        return value_to_uint32(ctx, 10, &conf->custom_shader.animation_duration);
 
     else if (streq(key, "font-size-presets"))
         return value_to_font_size_presets(ctx, &conf->font_size_presets.sizes,
@@ -4054,6 +4147,10 @@ config_load(struct config *conf, const char *conf_path,
             .style = UNDERLINE_DOTTED,
         },
         .custom_regexes = tll_init(),
+        .custom_shader = {
+            .animation = SHADER_ANIMATION_AUTO,
+            .animation_duration = 1000,
+        },
         .can_shape_grapheme = fcft_caps & FCFT_CAPABILITY_GRAPHEME_SHAPING,
         .scrollback = {
             .lines = 1000,
@@ -4512,6 +4609,17 @@ config_clone(const struct config *old)
                   old->font_size_presets.count * sizeof(old->font_size_presets.sizes[0]))
         : NULL;
 
+    conf->custom_shader.paths = NULL;
+    conf->custom_shader.optional = NULL;
+    if (old->custom_shader.count > 0) {
+        const size_t count = old->custom_shader.count;
+        conf->custom_shader.paths = xcalloc(count, sizeof(conf->custom_shader.paths[0]));
+        conf->custom_shader.optional = xmemdup(
+            old->custom_shader.optional, count * sizeof(old->custom_shader.optional[0]));
+        for (size_t i = 0; i < count; i++)
+            conf->custom_shader.paths[i] = xstrdup(old->custom_shader.paths[i]);
+    }
+
     conf->url.label_letters = xc32dup(old->url.label_letters);
     spawn_template_clone(&conf->url.launch, &old->url.launch);
     conf->url.regex = xstrdup(old->url.regex);
@@ -4614,6 +4722,7 @@ config_free(struct config *conf)
 
     config_font_list_destroy(&conf->csd.font);
     free(conf->font_size_presets.sizes);
+    custom_shaders_free(conf);
 
     free(conf->url.label_letters);
     spawn_template_free(&conf->url.launch);

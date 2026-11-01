@@ -34,6 +34,12 @@ const char version_and_features[] =
     " -blur"
 #endif
 
+#if defined(ANKLE_SHADERS_ENABLED) && ANKLE_SHADERS_ENABLED
+    " +shaders"
+#else
+    " -shaders"
+#endif
+
 #if !defined(NDEBUG)
     " +assertions"
 #else

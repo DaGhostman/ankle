@@ -84,6 +84,16 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 
 ### Added
 
+* Custom shaders, compatible with Ghostty's: `custom-shader` applies
+  one or more GLSL (Shadertoy style) fragment shaders to the
+  terminal, with the same uniforms as Ghostty (including the cursor
+  ones, used by cursor trail effects). `custom-shader-animation`
+  (`auto`, `true`, `false` or `always`) controls when shaders
+  animate; the default, `auto`, only animates for a short while
+  (`custom-shader-animation-duration`) after the cursor moves, so that
+  an idle window uses no power. Rendering is still done on the CPU;
+  frames are copied to an OpenGL texture and presented with EGL.
+  Requires building with `-Dshaders=enabled`.
 * Ligature support: runs of text are shaped together, allowing fonts
   to render ligatures and contextual alternates (e.g. Monaspace's
   texture healing). Controlled with the new `ligatures` option

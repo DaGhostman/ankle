@@ -30,6 +30,7 @@
 #include "ime.h"
 #include "input.h"
 #include "render.h"
+#include "shader.h"
 #include "selection.h"
 #include "shm.h"
 #include "shm-formats.h"
@@ -1762,7 +1763,46 @@ static void
 fdm_hook(struct fdm *fdm, void *data)
 {
     struct wayland *wayl = data;
+
+    if (unlikely(!wayl->read_prepared && wayl->fd >= 0)) {
+        /* Prepared read was given up (wayl_read_suspend()), and
+         * couldn't be re-prepared since there were pending events */
+        while (wl_display_prepare_read(wayl->display) != 0) {
+            if (wl_display_dispatch_pending(wayl->display) < 0) {
+                LOG_ERRNO("failed to dispatch pending Wayland events");
+                break;
+            }
+        }
+        wayl->read_prepared = true;
+    }
+
     wayl_flush(wayl);
+}
+
+bool
+wayl_read_suspend(struct wayland *wayl)
+{
+    if (!wayl->read_prepared)
+        return false;
+
+    wl_display_cancel_read(wayl->display);
+    wayl->read_prepared = false;
+    return true;
+}
+
+void
+wayl_read_resume(struct wayland *wayl, bool token)
+{
+    if (!token)
+        return;
+
+    /*
+     * If there are queued events, preparing fails. Don't dispatch
+     * them here (we may be in the middle of rendering); the FDM hook
+     * does that before we poll again.
+     */
+    if (wl_display_prepare_read(wayl->display) == 0)
+        wayl->read_prepared = true;
 }
 
 static bool
@@ -1772,6 +1812,17 @@ fdm_wayl(struct fdm *fdm, int fd, int events, void *data)
     int event_count = 0;
 
     if (events & EPOLLIN) {
+        if (unlikely(!wayl->read_prepared)) {
+            /* Prepared read was given up (wayl_read_suspend()) */
+            while (wl_display_prepare_read(wayl->display) != 0) {
+                if (wl_display_dispatch_pending(wayl->display) < 0) {
+                    LOG_ERRNO("failed to dispatch pending Wayland events");
+                    return false;
+                }
+            }
+        }
+
+        wayl->read_prepared = false;
         if (wl_display_read_events(wayl->display) < 0) {
             LOG_ERRNO("failed to read events from the Wayland socket");
             return false;
@@ -1785,6 +1836,7 @@ fdm_wayl(struct fdm *fdm, int fd, int events, void *data)
                 return false;
             }
         }
+        wayl->read_prepared = true;
     }
 
     if (events & EPOLLHUP) {
@@ -1928,6 +1980,7 @@ wayl_init(struct fdm *fdm, struct key_binding_manager *key_binding_manager,
         LOG_ERRNO("failed to prepare for reading wayland events");
         goto out;
     }
+    wayl->read_prepared = true;
 
     return wayl;
 
@@ -2030,6 +2083,9 @@ wayl_destroy(struct wayland *wayl)
         wl_registry_destroy(wayl->registry);
     if (wayl->fd != -1)
         fdm_del_no_close(wayl->fdm, wayl->fd);
+    /* EGL state is tied to the Wayland connection */
+    shader_fini(wayl);
+
     if (wayl->display != NULL) {
         wayl_flush(wayl);
         wl_display_disconnect(wayl->display);
@@ -2449,6 +2505,9 @@ wayl_flush(struct wayland *wayl)
             const int saved_errno = errno;
 
             if (errno == EPIPE) {
+                if (!wayl->read_prepared)
+                    wl_display_prepare_read(wayl->display);
+                wayl->read_prepared = false;
                 wl_display_read_events(wayl->display);
                 wl_display_dispatch_pending(wayl->display);
             }
@@ -2486,7 +2545,10 @@ wayl_flush(struct wayland *wayl)
 void
 wayl_roundtrip(struct wayland *wayl)
 {
-    wl_display_cancel_read(wayl->display);
+    if (wayl->read_prepared)
+        wl_display_cancel_read(wayl->display);
+    wayl->read_prepared = false;
+
     if (wl_display_roundtrip(wayl->display) < 0) {
         LOG_ERRNO("failed to roundtrip Wayland display");
         return;
@@ -2502,6 +2564,7 @@ wayl_roundtrip(struct wayland *wayl)
             return;
         }
     }
+    wayl->read_prepared = true;
     wayl_flush(wayl);
 }
 

@@ -78,6 +78,11 @@ void render_overlay(struct terminal *term) {}
 
 void render_buffer_release_callback(struct buffer *buf, void *data) {}
 
+#if defined(ANKLE_SHADERS_ENABLED) && ANKLE_SHADERS_ENABLED
+void shader_reload(struct terminal *term) {}
+void shader_destroy(struct terminal *term) {}
+#endif
+
 bool
 render_xcursor_is_valid(const struct seat *seat, const char *cursor)
 {
