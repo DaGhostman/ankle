@@ -170,7 +170,9 @@ tllist = dependency('tllist', version: '>=1.1.0', fallback: 'tllist')
 # Always use the bundled fcft, since it carries patches (see
 # subprojects/packagefiles/fcft). As a subproject, fcft is linked
 # statically, and nothing is installed.
-subproject('fcft', default_options: ['examples=false'])
+subproject('fcft', default_options: [
+  'examples=false',
+  'svg-backend=@0@'.format(get_option('svg-backend'))])
 fcft = dependency('fcft', version: ['>=3.3.1', '<4.0.0'])
 
 wayland_protocols_datadir = wayland_protocols.get_variable('pkgdatadir')
@@ -456,6 +458,7 @@ summary(
     'Documentation': scdoc.found(),
     'Themes': get_option('themes'),
     'IME': get_option('ime'),
+    'SVG glyph backend (fcft)': get_option('svg-backend'),
     'Grapheme clustering': utf8proc.found(),
     'utmp backend': utmp_backend,
     'utmp helper default path': utmp_default_helper_path,

@@ -165,6 +165,11 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   animation, and deletion ([foot#481][foot-481]). Images scroll and
   reflow with the text. Controlled with `tweak.kitty-graphics`, with
   image memory limited by `tweak.kitty-graphics-storage-limit`.
+* `-Dsvg-backend=resvg` build option: renders SVG color emoji with
+  the [resvg](https://github.com/linebender/resvg) library, instead of
+  the bundled nanosvg. Unlike nanosvg, it can render fonts that store
+  many glyphs in a single SVG document, such as OpenMoji
+  ([fcft#120][fcft-120]). The default is still `nanosvg`.
 
 ### Changed
 
@@ -227,6 +232,7 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-pr-2480]: https://codeberg.org/dnkl/foot/pulls/2480
 [foot-2487]: https://codeberg.org/dnkl/foot/issues/2487
 [foot-2400]: https://codeberg.org/dnkl/foot/issues/2400
+[fcft-120]: https://codeberg.org/dnkl/fcft/issues/120
 [foot-2493]: https://codeberg.org/dnkl/foot/issues/2493
 [foot-pr-2494]: https://codeberg.org/dnkl/foot/pulls/2494
 [foot-pr-2491]: https://codeberg.org/dnkl/foot/pulls/2491
