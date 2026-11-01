@@ -1359,7 +1359,11 @@ move_cursor_after(struct terminal *term, const struct geometry *g)
 
     const int bottom = term->scroll_region.end - 1;
     if (row > bottom && cursor->row <= bottom) {
-        term_scroll(term, row - bottom);
+        /* An image taller than the scroll region scrolls it at most
+         * once over; term_scroll() requires a clamped amount */
+        const int height =
+            term->scroll_region.end - term->scroll_region.start;
+        term_scroll(term, min(row - bottom, height));
         row = bottom;
     }
 
@@ -3728,6 +3732,32 @@ UNITTEST
     term_scroll(&term, 1);
     xassert(tll_length(term.normal.kitty_placements) == 0);
     term.scroll_region = (struct scroll_region){.start = 0, .end = term.rows};
+
+    test_fini(&term, fds);
+}
+
+/* An image taller than the scroll region, placed with cursor movement,
+ * scrolls the region at most once over (used to trip an assertion in
+ * term_scroll_partial(), and spin in release builds) */
+UNITTEST
+{
+    struct config conf;
+    struct terminal term;
+    int fds[2];
+    test_init(&term, &conf, fds);
+
+    test_apc(&term, "a=t,i=1,f=24,s=1,v=1,q=1;AAAA");
+
+    term.scroll_region = (struct scroll_region){.start = 1, .end = 4};
+    term_cursor_to(&term, 2, 0);
+    test_apc(&term, "a=p,i=1,r=40,c=2,q=2");
+    xassert(term.grid->cursor.point.row == 3);
+    xassert(term.grid->cursor.point.col == 2);
+
+    term.scroll_region = (struct scroll_region){.start = 0, .end = term.rows};
+    term_cursor_to(&term, 0, 0);
+    test_apc(&term, "a=p,i=1,r=51,c=1,q=2");
+    xassert(term.grid->cursor.point.row == term.rows - 1);
 
     test_fini(&term, fds);
 }
