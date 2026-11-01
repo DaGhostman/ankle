@@ -46,9 +46,15 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 dir = ab / len, n = vec2(-dir.y, dir.x);
     if (n.y < 0.0) n = -n;                       // always bow upward
 
-    float along = dot(fragCoord - a, dir) / len;
+    float along_ = dot(fragCoord - a, dir) / len;
     float tailAt = 1.0 - pow(1.0 - t, 2.0);       // the tail chases the blade
-    if (along < tailAt || along > 1.0) return;
+    float along = clamp(along_, tailAt, 1.0);
+
+    // Past either end: how far, in pixels. The glow fades out over a
+    // short distance there instead of being cut off straight.
+    float past = abs(along_ - along) * len;
+    if (past > cellH) return;
+    float cap = exp(-past / (cellH * 0.12));
 
     float bow = CURVE * cellH * sin(3.14159 * along);
     float d = dot(fragCoord - a, n) - bow;
@@ -59,7 +65,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float blade = smoothstep(w, w * 0.2, abs(d));
     float edge = exp(-abs(d - w * 0.6) / (cellH * 0.05)) * h;
 
-    float k = 1.0 - t * t;
+    float k = (1.0 - t * t) * cap;
     vec3 steel = vec3(0.92, 0.95, 1.0);
     vec3 c = iCurrentCursorColor.rgb;
     fragColor.rgb = mix(fragColor.rgb, steel, blade * k * 0.85);

@@ -45,12 +45,13 @@ float bolt(vec2 p, vec2 a, vec2 b, float cellH, float seed, float width) {
     float len = length(ab);
     vec2 dir = ab / len, n = vec2(-dir.y, dir.x);
     float along = dot(p - a, dir) / len;
-    if (along < 0.0 || along > 1.0)
-        return 0.0;
-    float x = along * len / cellH * 1.4;
+    float inside = clamp(along, 0.0, 1.0);
+    float x = inside * len / cellH * 1.4;
     float off = (jag(x, seed) * 0.7 + jag(x * 3.0, seed + 3.0) * 0.3)
-              * JAGGED * cellH * sin(3.14159 * along);
-    float d = abs(dot(p - a, n) - off);
+              * JAGGED * cellH * sin(3.14159 * inside);
+    // Past either end, measure to the end point, so the glow is round
+    // there instead of cut off straight
+    float d = length(vec2((along - inside) * len, dot(p - a, n) - off));
     return smoothstep(width, width * 0.3, d) + exp(-d / (cellH * 0.25)) * 0.5;
 }
 
