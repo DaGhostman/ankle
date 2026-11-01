@@ -203,10 +203,6 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
   crash a configuration reload, or a drag-and-drop.
 * Duplicated log messages in the journal, when running the server
   as a systemd service ([foot#2400][foot-2400]).
-* Some color emoji from SVG fonts (e.g. OpenMoji) not rendering with
-  freetype >= 2.15 ("failed to render glyph: unimplemented feature").
-  The bundled fcft is updated, and carries fcft PR
-  [#121][fcft-pr-121] ([fcft#120][fcft-120]).
 * Neovim's `:registers` hanging ("Waiting for OSC 52 response") when
   the clipboard is empty: an OSC-52 query now always gets a reply
   ([foot#2493][foot-2493]; patch from foot PR [#2494][foot-pr-2494]).
@@ -231,8 +227,6 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 [foot-pr-2480]: https://codeberg.org/dnkl/foot/pulls/2480
 [foot-2487]: https://codeberg.org/dnkl/foot/issues/2487
 [foot-2400]: https://codeberg.org/dnkl/foot/issues/2400
-[fcft-pr-121]: https://codeberg.org/dnkl/fcft/pulls/121
-[fcft-120]: https://codeberg.org/dnkl/fcft/issues/120
 [foot-2493]: https://codeberg.org/dnkl/foot/issues/2493
 [foot-pr-2494]: https://codeberg.org/dnkl/foot/pulls/2494
 [foot-pr-2491]: https://codeberg.org/dnkl/foot/pulls/2491
