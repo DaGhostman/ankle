@@ -131,6 +131,41 @@ hooks, are switched off in the ported versions (`ENTER_EFFECT`,
 they are.
 
 
+### Terminal shaders
+
+Six shaders for the whole terminal are installed alongside them, in
+`share/ankle/shaders/terminal`:
+
+| Shader | What it does | Animation |
+|--------|--------------|-----------|
+| `retro-crt.glsl` | Curved tube, scanlines, aperture grille, glow, flicker, and an interference line rolling down the screen every few seconds | `always` |
+| `amber-monitor.glsl` | Monochrome amber phosphor screen (green and white variants in the file) | not needed |
+| `vhs.glsl` | Colour bleed, wobble, a drifting tracking band and the occasional burst of torn lines | `always` |
+| `glow.glsl` | Soft bloom around bright text | not needed |
+| `aurora-backdrop.glsl` | Northern lights drifting behind the text; only the background colour is replaced | `true` |
+| `focus-dim.glsl` | Fades unfocused windows to a muted grey | not needed (`auto`) |
+
+```ini
+[main]
+custom-shader=/usr/share/ankle/shaders/terminal/retro-crt.glsl
+custom-shader-animation=always
+```
+
+The settings are the `#define` lines at the top of each file.
+Shaders can be chained; to combine one with a cursor effect, list the
+cursor effect first so it gets the same treatment as the text:
+
+```ini
+[main]
+include=/usr/share/ankle/shaders/cursor-fx/neon.ini
+custom-shader=/usr/share/ankle/shaders/cursor-fx/neon-cursor.glsl /usr/share/ankle/shaders/terminal/retro-crt.glsl
+custom-shader-animation=always
+```
+
+`always` keeps the GPU busy even while the terminal is idle, so the
+animated ones cost some battery.
+
+
 ## Switching from foot
 
 * The executables are `ankle` and `ankleclient`, and the systemd units

@@ -682,6 +682,10 @@ re-applied on top of the reloaded configuration.
 	ankle's installation prefix), each with an _.ini_ preset to
 	*include*.
 	
+	Six terminal shaders (retro-crt, amber-monitor, vhs, glow,
+	aurora-backdrop and focus-dim) are installed in
+	_share/ankle/shaders/terminal_.
+	
 	Requires ankle to be built with *-Dshaders=enabled* (check with
 	*ankle --version*), and OpenGL 3.3. An empty value disables
 	shaders.
