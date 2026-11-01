@@ -7,6 +7,8 @@
 # Environment:
 #   BUILD_DIR  build directory (default: build-pgo)
 #   PREFIX     install prefix  (default: ~/.local)
+#   SHADERS    custom shader support, enabled|disabled|auto
+#              (default: enabled; needs EGL, OpenGL and wayland-egl)
 #
 
 set -eu
@@ -15,6 +17,7 @@ cd "$(dirname "$(realpath "${0}")")"
 
 blddir=${BUILD_DIR-build-pgo}
 prefix=${PREFIX-${HOME}/.local}
+shaders=${SHADERS-enabled}
 install=yes
 [ "${1-}" = "--no-install" ] && install=no
 
@@ -43,7 +46,8 @@ set -x
 
 # 1. configure (from scratch)
 rm -rf "${blddir}"
-meson setup --buildtype=release -Db_lto=true --prefix="${prefix}" "${blddir}" .
+meson setup --buildtype=release -Db_lto=true -Dshaders="${shaders}" \
+    --prefix="${prefix}" "${blddir}" .
 
 # 2. instrumented build
 meson configure "${blddir}" -Db_pgo=generate

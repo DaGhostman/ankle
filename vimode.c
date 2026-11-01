@@ -311,8 +311,10 @@ update_selection(struct terminal *term)
     };
     struct vipos b = cursor_pos(term);
 
-    struct vipos start, end;
-    enum selection_kind kind;
+    /* Initialized only to silence -Wmaybe-uninitialized (seen with
+     * -O3 -fprofile-generate); every visual mode sets them below */
+    struct vipos start = a, end = b;
+    enum selection_kind kind = SELECTION_CHAR_WISE;
 
     switch (term->vimode.visual) {
     case VIMODE_VISUAL_NONE:

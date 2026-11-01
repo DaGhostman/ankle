@@ -14,6 +14,7 @@
 #include "async.h"
 #include "config.h"
 #include "key-binding.h"
+#include "paste.h"
 #include "reaper.h"
 #include "shaping.h"
 #include "sixel.h"
@@ -83,6 +84,17 @@ void shader_reload(struct terminal *term) {}
 void shader_destroy(struct terminal *term) {}
 #endif
 
+void paste_begin(struct terminal *term) {}
+void paste_data(struct terminal *term, const char *data, size_t size) {}
+void paste_end(struct terminal *term) {}
+bool paste_in_progress(const struct terminal *term) { return false; }
+
+bool
+config_fonts_equal(const struct config *a, const struct config *b)
+{
+    return true;
+}
+
 bool
 render_xcursor_is_valid(const struct seat *seat, const char *cursor)
 {
@@ -112,6 +124,14 @@ void wayl_win_alpha_changed(struct wl_window *win) {}
 bool wayl_win_set_urgent(struct wl_window *win) { return true; }
 bool wayl_win_ring_bell(const struct wl_window *win) { return true; }
 bool wayl_fractional_scaling(const struct wayland *wayl) { return true; }
+
+bool
+wayl_get_activation_token(
+    struct wayland *wayl, struct seat *seat, uint32_t serial,
+    struct wl_window *win, activation_token_cb_t cb, void *cb_data)
+{
+    return false;
+}
 
 pid_t
 spawn(struct reaper *reaper, const char *cwd, char *const argv[],
