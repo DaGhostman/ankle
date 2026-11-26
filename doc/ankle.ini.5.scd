@@ -1731,12 +1731,14 @@ e.g. *search-start=none*.
 	Default: _none_.
 
 *spawn-terminal*
-	Spawns a new terminal. If the shell has been configured to emit
-	the OSC 7 escape sequence, the new terminal will start in the
-	current working directory.
+	Spawns a new terminal, with the same command line options, and
+	running the same command, as the current one. If the shell has
+	been configured to emit the OSC 7 escape sequence, the new
+	terminal will start in the current working directory.
 	
 	Optionally, a command to run in the new terminal, instead of the
-	shell, can be given in brackets, before the key combinations. Like
+	original command (or the shell), can be given in brackets, before
+	the key combinations; the command line options are kept. Like
 	the *pipe-\** bindings, a binding with a command is added next to
 	the plain one; to use the default key combination for it, unbind
 	the plain one first:

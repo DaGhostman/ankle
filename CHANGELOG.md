@@ -245,7 +245,14 @@ Based on foot 1.28.0 (foot `master`, commit `cb277178`).
 * Crash when a sixel image is emitted while the cursor is outside a
   scrolling region (e.g. below it), and the image does not fit on the
   screen. The image is now clipped at the bottom of the screen.
+* `spawn-terminal` ignoring the command line options (other than
+  `--config`) of the original instance, e.g. `-o` overrides, `-a`
+  or `--window-size-chars`. Plain `spawn-terminal` now replays the
+  full original command line, command included, like foot
+  ([foot#1622][foot-1622]; patch from foot). `spawn-terminal=[cmd]`
+  keeps the original options, but runs `cmd` instead.
 
+[foot-1622]: https://codeberg.org/dnkl/foot/issues/1622
 [foot-2372]: https://codeberg.org/dnkl/foot/issues/2372
 [foot-2343]: https://codeberg.org/dnkl/foot/issues/2343
 [foot-2365]: https://codeberg.org/dnkl/foot/issues/2365

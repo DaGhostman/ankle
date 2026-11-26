@@ -1218,7 +1218,8 @@ struct terminal *
 term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
           struct wayland *wayl, const char *foot_exe, const char *cwd,
           const char *token, const char *pty_path,
-          int argc, char *const *argv, const char *const *envp,
+          int slave_argc, char *const *slave_argv, const char *const *slave_envp,
+          int foot_argc, const char *const *foot_argv,
           void (*shutdown_cb)(void *data, int exit_code), void *shutdown_data)
 {
     int ptmx = -1;
@@ -1460,7 +1461,13 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
         .ime_enabled = true,
 #endif
         .active_notifications = tll_init(),
+        .argc = foot_argc,
+        .argv = xcalloc(foot_argc, sizeof(char *)),
+        .argc_options = min(max(foot_argc - slave_argc, 1), foot_argc),
     };
+
+    for (int i = 0; i < foot_argc; i++)
+        term->argv[i] = xstrdup(foot_argv[i]);
 
     pixman_region32_init(&term->render.last_overlay_clip);
 
@@ -1490,8 +1497,8 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
     if (!pty_path) {
         /* Start the slave/client */
         if ((term->slave = slave_spawn(
-                 term->ptmx, argc, term->cwd, argv, envp, &conf->env_vars,
-                 conf->term, conf->shell, conf->login_shell,
+                 term->ptmx, slave_argc, term->cwd, slave_argv, slave_envp,
+                 &conf->env_vars, conf->term, conf->shell, conf->login_shell,
                  &conf->notifications)) == -1)
         {
             goto err;
@@ -2016,6 +2023,10 @@ term_destroy(struct terminal *term)
     free(term->cwd);
     free(term->mouse_user_cursor);
     free(term->color_stack.stack);
+
+    for (int i = 0; i < term->argc; i++)
+        free(term->argv[i]);
+    free(term->argv);
 
     int ret = EXIT_SUCCESS;
 
@@ -4473,22 +4484,41 @@ argv_free(char **argv)
     free(argv);
 }
 
-/* Command line for a new terminal instance, optionally running 'cmd'
- * instead of the shell */
+/*
+ * Command line for a new terminal instance.
+ *
+ * Without 'cmd', this replays the original command line (options and
+ * command), like foot does. With 'cmd', the original options are kept,
+ * but 'cmd' runs instead of the original command.
+ *
+ * Falls back to just --config if the original command line isn't known.
+ */
 char **
 term_spawn_new_argv(const struct terminal *term, const struct argv *cmd)
 {
     char **argv = NULL;
     size_t argc = 0;
 
+    const bool have_cmd =
+        cmd != NULL && cmd->args != NULL && cmd->args[0] != NULL;
+
     argv = argv_dup_append(argv, &argc, term->foot_exe);
-    if (term->conf->conf_path != NULL) {
-        argv = argv_dup_append(argv, &argc, "--config");
-        argv = argv_dup_append(argv, &argc, term->conf->conf_path);
+
+    if (term->argc == 0) {
+        if (term->conf->conf_path != NULL) {
+            argv = argv_dup_append(argv, &argc, "--config");
+            argv = argv_dup_append(argv, &argc, term->conf->conf_path);
+        }
+    } else {
+        const int last = have_cmd ? term->argc_options : term->argc;
+        for (int i = 1; i < last; i++)
+            argv = argv_dup_append(argv, &argc, term->argv[i]);
     }
 
-    if (cmd != NULL && cmd->args != NULL && cmd->args[0] != NULL) {
-        argv = argv_dup_append(argv, &argc, "--");
+    if (have_cmd) {
+        /* The original options may already end with "--" */
+        if (argc < 2 || !streq(argv[argc - 1], "--"))
+            argv = argv_dup_append(argv, &argc, "--");
         for (char **arg = cmd->args; *arg != NULL; arg++)
             argv = argv_dup_append(argv, &argc, *arg);
     }
@@ -4635,6 +4665,66 @@ UNITTEST
     char *no_args[] = {NULL};
     argv = term_spawn_new_argv(&term, &(struct argv){.args = no_args});
     xassert(streq(argv[2], "/etc/ankle.ini"));
+    xassert(argv[3] == NULL);
+    argv_free(argv);
+}
+
+UNITTEST
+{
+    /* With the original command line: ankle -o x=y -- vim file */
+    struct config conf = {.conf_path = "/etc/ankle.ini"};
+    char *orig[] = {"ankle", "-o", "x=y", "--", "vim", "file"};
+    struct terminal term = {
+        .conf = &conf,
+        .foot_exe = "/usr/bin/ankle",
+        .argc = 6,
+        .argv = orig,
+        .argc_options = 4,
+    };
+
+    /* Plain spawn-terminal replays everything */
+    char **argv = term_spawn_new_argv(&term, NULL);
+    xassert(streq(argv[0], "/usr/bin/ankle"));
+    xassert(streq(argv[1], "-o"));
+    xassert(streq(argv[2], "x=y"));
+    xassert(streq(argv[3], "--"));
+    xassert(streq(argv[4], "vim"));
+    xassert(streq(argv[5], "file"));
+    xassert(argv[6] == NULL);
+    argv_free(argv);
+
+    /* spawn-terminal=[cmd] keeps the options, replaces the command */
+    char *args[] = {"htop", NULL};
+    argv = term_spawn_new_argv(&term, &(struct argv){.args = args});
+    xassert(streq(argv[1], "-o"));
+    xassert(streq(argv[2], "x=y"));
+    xassert(streq(argv[3], "--"));
+    xassert(streq(argv[4], "htop"));
+    xassert(argv[5] == NULL);
+    argv_free(argv);
+
+    /* No "--" in the original: ankle -o x=y vim */
+    char *orig2[] = {"ankle", "-o", "x=y", "vim"};
+    term.argc = 4;
+    term.argv = orig2;
+    term.argc_options = 3;
+    argv = term_spawn_new_argv(&term, &(struct argv){.args = args});
+    xassert(streq(argv[3], "--"));
+    xassert(streq(argv[4], "htop"));
+    xassert(argv[5] == NULL);
+    argv_free(argv);
+
+    /* No options at all: ankle */
+    char *orig3[] = {"ankle"};
+    term.argc = 1;
+    term.argv = orig3;
+    term.argc_options = 1;
+    argv = term_spawn_new_argv(&term, NULL);
+    xassert(argv[1] == NULL);
+    argv_free(argv);
+    argv = term_spawn_new_argv(&term, &(struct argv){.args = args});
+    xassert(streq(argv[1], "--"));
+    xassert(streq(argv[2], "htop"));
     xassert(argv[3] == NULL);
     argv_free(argv);
 }

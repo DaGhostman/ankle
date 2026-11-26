@@ -100,6 +100,19 @@ print_usage(const char *prog_name)
     puts(options);
 }
 
+static const char *
+get_footclient_exe(void)
+{
+    /* Linux only, fallback to "ankleclient" */
+    static char lnk[PATH_MAX];
+    ssize_t ret = readlink("/proc/self/exe", lnk, sizeof(lnk) - 1);
+    if (ret < 0)
+        return "ankleclient";
+
+    lnk[ret] = '\0';
+    return lnk;
+}
+
 static bool NOINLINE
 push_string(string_list_t *string_list, const char *s, uint64_t *total_len)
 {
@@ -152,6 +165,11 @@ main(int argc, char *const *argv)
     static const int foot_exit_failure = -36;
     int ret = foot_exit_failure;
 
+    const int foot_argc = argc;
+    const char *foot_argv[foot_argc];
+    for (int i = 0; i < foot_argc; i++)
+        foot_argv[i] = argv[i];
+
     const char *const prog_name = argc > 0 ? argv[0] : "<nullptr>";
 
     static const struct option longopts[] =  {
@@ -201,7 +219,8 @@ main(int argc, char *const *argv)
     /* malloc:ed and needs to be in scope of all goto's */
     int fd = -1;
     char *_cwd = NULL;
-    struct client_string *cargv = NULL;
+    struct client_string *cfoot_argv = NULL;
+    struct client_string *cslave_argv = NULL;
     string_list_t overrides = tll_init();
     string_list_t envp = tll_init();
 
@@ -426,6 +445,7 @@ main(int argc, char *const *argv)
         }
     }
 
+    const char *exe = get_footclient_exe();
     const char *cwd = custom_cwd;
     if (cwd == NULL) {
         size_t buf_len = 1024;
@@ -471,6 +491,7 @@ main(int argc, char *const *argv)
     }
 
     /* String lengths, including NULL terminator */
+    const size_t exe_len = strlen(exe) + 1;
     const size_t cwd_len = strlen(cwd) + 1;
     const size_t override_count = tll_length(overrides);
     const size_t env_count = tll_length(envp);
@@ -480,35 +501,52 @@ main(int argc, char *const *argv)
         .no_wait = no_wait,
         .xdga_token = xdga_token,
         .token_len = token_len,
+        .exe_len = exe_len,
         .cwd_len = cwd_len,
         .override_count = override_count,
-        .argc = argc,
+        .foot_argc = foot_argc,
+        .slave_argc = argc,
         .env_count = env_count,
     };
 
     /* Total packet length, not (yet) including argv[] */
-    total_len += sizeof(data) + cwd_len + token_len;
+    total_len += sizeof(data) + exe_len + cwd_len + token_len;
 
-    /* Add argv[] size to total packet length */
-    cargv = xmalloc(argc * sizeof(cargv[0]));
-    for (size_t i = 0; i < argc; i++) {
-        const size_t arg_len = strlen(argv[i]) + 1;
+    cfoot_argv = xmalloc(foot_argc * sizeof(cfoot_argv[0]));
+    for (size_t i = 0; i < foot_argc; i++) {
+        const size_t arg_len = strlen(foot_argv[i]) + 1;
 
-        if (arg_len >= 1 << (8 * sizeof(cargv[i].len))) {
+        if (arg_len >= 1 << (8 * sizeof(cfoot_argv[i].len))) {
             LOG_ERR("argv length overflow");
             goto err;
         }
 
-        cargv[i].len = arg_len;
-        total_len += sizeof(cargv[i]) + cargv[i].len;
+        cfoot_argv[i].len = arg_len;
+        total_len += sizeof(cfoot_argv[i]) + cfoot_argv[i].len;
+    }
+
+    /* Add argv[] size to total packet length */
+    cslave_argv = xmalloc(argc * sizeof(cslave_argv[0]));
+    for (size_t i = 0; i < argc; i++) {
+        const size_t arg_len = strlen(argv[i]) + 1;
+
+        if (arg_len >= 1 << (8 * sizeof(cslave_argv[i].len))) {
+            LOG_ERR("argv length overflow");
+            goto err;
+        }
+
+        cslave_argv[i].len = arg_len;
+        total_len += sizeof(cslave_argv[i]) + cslave_argv[i].len;
     }
 
     /* Check for size overflows */
     if (total_len >= 1llu << (8 * sizeof(uint32_t)) ||
+        exe_len >= 1 << (8 * sizeof(data.exe_len)) ||
         cwd_len >= 1 << (8 * sizeof(data.cwd_len)) ||
         token_len >= 1 << (8 * sizeof(data.token_len)) ||
         override_count > (size_t)(unsigned int)data.override_count ||
-        argc > (int)(unsigned int)data.argc ||
+        foot_argc > (int)(unsigned int)data.foot_argc ||
+        argc > (int)(unsigned int)data.slave_argc ||
         env_count > (size_t)(unsigned int)data.env_count)
     {
         LOG_ERR("size overflow");
@@ -518,6 +556,7 @@ main(int argc, char *const *argv)
     /* Send everything except argv[] */
     if (sendall(fd, &(uint32_t){total_len}, sizeof(uint32_t)) < 0 ||
         sendall(fd, &data, sizeof(data)) < 0 ||
+        sendall(fd, exe, exe_len) < 0 ||
         sendall(fd, cwd, cwd_len) < 0)
     {
         LOG_ERRNO("failed to send setup packet to server");
@@ -537,12 +576,22 @@ main(int argc, char *const *argv)
     if (!send_string_list(fd, &overrides))
         goto err;
 
-    /* Send argv[] */
-    for (size_t i = 0; i < argc; i++) {
-        if (sendall(fd, &cargv[i], sizeof(cargv[i])) < 0 ||
-            sendall(fd, argv[i], cargv[i].len) < 0)
+    /* Send foot_argv[] */
+    for (size_t i = 0; i < foot_argc; i++) {
+        if (sendall(fd, &cfoot_argv[i], sizeof(cfoot_argv[i])) < 0 ||
+            sendall(fd, foot_argv[i], cfoot_argv[i].len) < 0)
         {
-            LOG_ERRNO("failed to send setup packet (argv) to server");
+            LOG_ERRNO("failed to send setup packet (foot argv) to server");
+            goto err;
+        }
+    }
+
+    /* Send slave_argv[] */
+    for (size_t i = 0; i < argc; i++) {
+        if (sendall(fd, &cslave_argv[i], sizeof(cslave_argv[i])) < 0 ||
+            sendall(fd, argv[i], cslave_argv[i].len) < 0)
+        {
+            LOG_ERRNO("failed to send setup packet (slave argv) to server");
             goto err;
         }
     }
@@ -619,7 +668,8 @@ main(int argc, char *const *argv)
 err:
     free_string_list(&envp);
     free_string_list(&overrides);
-    free(cargv);
+    free(cfoot_argv);
+    free(cslave_argv);
     free(_cwd);
     free(custom_cwd);
     if (fd != -1)

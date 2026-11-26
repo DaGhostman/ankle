@@ -193,7 +193,8 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
     struct client *client = data;
     struct server *server = client->server;
 
-    char **argv = NULL;
+    char **foot_argv = NULL;
+    char **slave_argv = NULL;
     config_override_t overrides = tll_init();
     char **envp = NULL;
 
@@ -349,6 +350,10 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
     memcpy(&cdata, p, sizeof(cdata));
     p += sizeof(cdata);
 
+    CHECK_BUF_AND_NULL(cdata.exe_len);
+    const char *footclient_exe = (const char *)p; p += cdata.exe_len;
+    LOG_DBG("EXE = %.*s", cdata.exe_len, footclient_exe);
+
     CHECK_BUF_AND_NULL(cdata.cwd_len);
     const char *cwd = (const char *)p; p += cdata.cwd_len;
     LOG_DBG("CWD = %.*s", cdata.cwd_len, cwd);
@@ -377,16 +382,28 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
         tll_push_back(overrides, xstrdup(str));
     }
 
-    /* argv */
-    argv = xcalloc(cdata.argc + 1, sizeof(argv[0]));
-    for (uint16_t i = 0; i < cdata.argc; i++) {
+    /* foot argv (for spawn-terminal) */
+    foot_argv = xcalloc(cdata.foot_argc + 1, sizeof(foot_argv[0]));
+    for (uint16_t i = 0; i < cdata.foot_argc; i++) {
         struct client_string arg;
         CHECK_BUF(sizeof(arg));
         memcpy(&arg, p, sizeof(arg)); p += sizeof(arg);
 
         CHECK_BUF_AND_NULL(arg.len);
-        argv[i] = (char *)p; p += arg.len;
-        LOG_DBG("argv[%hu] = %.*s", i, arg.len, argv[i]);
+        foot_argv[i] = (char *)p; p += arg.len;
+        LOG_DBG("foot argv[%hu] = %.*s", i, arg.len, foot_argv[i]);
+    }
+
+    /* slave argv */
+    slave_argv = xcalloc(cdata.slave_argc + 1, sizeof(slave_argv[0]));
+    for (uint16_t i = 0; i < cdata.slave_argc; i++) {
+        struct client_string arg;
+        CHECK_BUF(sizeof(arg));
+        memcpy(&arg, p, sizeof(arg)); p += sizeof(arg);
+
+        CHECK_BUF_AND_NULL(arg.len);
+        slave_argv[i] = (char *)p; p += arg.len;
+        LOG_DBG("slave argv[%hu] = %.*s", i, arg.len, slave_argv[i]);
     }
 
     /* envp */
@@ -442,9 +459,9 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
 
     instance->terminal = term_init(
         conf != NULL ? conf : server->conf,
-        server->fdm, server->reaper, server->wayl, "ankleclient", cwd, token,
-        NULL, cdata.argc, argv, (const char *const *)envp,
-        &term_shutdown_handler, instance);
+        server->fdm, server->reaper, server->wayl, footclient_exe, cwd, token,
+        NULL, cdata.slave_argc, slave_argv, (const char *const *)envp,
+        cdata.foot_argc, (const char **)foot_argv, &term_shutdown_handler, instance);
 
     if (instance->terminal == NULL) {
         LOG_ERR("failed to instantiate new terminal");
@@ -462,7 +479,8 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
         // the instance is attached to the client
         instance->client = client;
         client->instance = instance;
-        free(argv);
+        free(foot_argv);
+        free(slave_argv);
         free(envp);
         tll_free_and_free(overrides, free);
     }
@@ -472,7 +490,8 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
 shutdown:
     LOG_DBG("client FD=%d: disconnected", client->fd);
 
-    free(argv);
+    free(foot_argv);
+    free(slave_argv);
     free(envp);
     tll_free_and_free(overrides, free);
     fdm_del(fdm, fd);
