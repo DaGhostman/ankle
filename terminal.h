@@ -901,6 +901,13 @@ struct terminal {
     bool grapheme_shaping;
     bool ligatures;  /* Runtime state; see term_set_ligatures() */
     bool size_notifications;
+
+    /* For spawn-terminal: the full original command line, and how
+     * many of its arguments (argv[0] included) are options, i.e. come
+     * before the command */
+    int argc;
+    char **argv;
+    int argc_options;
 };
 
 struct config;
@@ -908,7 +915,8 @@ struct terminal *term_init(
     const struct config *conf, struct fdm *fdm, struct reaper *reaper,
     struct wayland *wayl, const char *foot_exe, const char *cwd,
     const char *token, const char *pty_path,
-    int argc, char *const *argv, const char *const *envp,
+    int slave_argc, char *const *slave_argv, const char *const *slave_envp,
+    int foot_argc, const char *const *foot_argv,
     void (*shutdown_cb)(void *data, int exit_code), void *shutdown_data);
 
 bool term_shutdown(struct terminal *term);
